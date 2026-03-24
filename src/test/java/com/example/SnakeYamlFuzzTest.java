@@ -11,14 +11,15 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 class SnakeYamlFuzzTest {
 
-    // static Stream<Arguments> fuzzYamlParser() {
-    //     return Stream.of(
-    //         arguments("&a [ *a ]") // 순환 참조 시드
-    //     );
-    // }
+    // 시드를 생성하는 메서드
+    static Stream<Arguments> fuzzYamlParser() {
+        return Stream.of(
+            arguments("&a [ *a ]") // 순환 참조 시드
+        );
+    }
 
-    // @MethodSource
-    @FuzzTest
+    @MethodSource // 이 클래스와 같은 이름의 스태틱 메서드의 반환값을 시드로 입력받음
+    @FuzzTest // Jazzer 그레이박스 퍼징 실행
     void fuzzYamlParser(@NotNull String input) {
         try {
             Yaml yaml = new Yaml();
