@@ -11,25 +11,33 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 class SnakeYamlFuzzTest {
 
-    // 초기 시드 데이터 제공 (MethodSource)
-    static Stream<Arguments> provideSeedData() {
+    static Stream<Arguments> fuzzYamlParser() {
         return Stream.of(
-            arguments("name: Jazzer\ntype: Fuzzer"), // 1. 평범한 키-밸류 시드
-            arguments("!!set\n? a\n? b"),           // 2. 특수 태그를 포함한 시드
-            arguments("&a [ *a ]")                   // 3. 앵커(&)와 에일리어스(*) 참조 시드
+            arguments("name: Jazzer\ntype: Fuzzer"),
+            arguments("!!set\n? a\n? b"),
+            arguments("&a [ *a ]") // 순환 참조 시드
         );
     }
 
-    @MethodSource("provideSeedData")
+    @MethodSource
     @FuzzTest
     void fuzzYamlParser(@NotNull String input) {
         try {
             Yaml yaml = new Yaml();
-            yaml.load(input); 
-        } catch (org.yaml.snakeyaml.error.YAMLException | IllegalArgumentException e) {
-            // 단순 문법 오류나 파싱 실패는 무시합니다.
-            // 우리가 찾는 타겟은 JVM을 터뜨리는 StackOverflowError나 OutOfMemoryError입니다.
-            // 이러한 치명적인 시스템 에러(Error)는 catch 블록에 잡히지 않고 Jazzer에 의해 크래시로 기록됩니다.
+            Object parsed = yaml.load(input); 
+            
+            // 핵심 트리거: 메모리에 올라간 객체를 순회하도록 강제합니다.
+            // 만약 순환 참조 객체라면, hashCode()나 toString()을 호출하는 순간 
+            // JVM이 무한 루프에 빠지며 StackOverflowError가 터집니다!
+            if (parsed != null) {
+                parsed.toString();
+            }
+            
+        } catch (Exception e) {
+            // YAMLException 뿐만 아니라 파싱 중 흔히 발생하는 모든 Java Exception을 무시합니다.
+            // 우리가 잡고자 하는 StackOverflowError나 OutOfMemoryError는 
+            // Exception이 아니라 'Error' 타입이므로 이 catch 블록을 무사히 통과하여 
+            // Jazzer에게 '크래시'로 정상 보고됩니다.
         }
     }
 }
