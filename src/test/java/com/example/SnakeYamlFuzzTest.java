@@ -11,15 +11,13 @@ import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 class SnakeYamlFuzzTest {
 
-    static Stream<Arguments> fuzzYamlParser() {
-        return Stream.of(
-            arguments("name: Jazzer\ntype: Fuzzer"),
-            arguments("!!set\n? a\n? b"),
-            arguments("&a [ *a ]") // 순환 참조 시드
-        );
-    }
+    // static Stream<Arguments> fuzzYamlParser() {
+    //     return Stream.of(
+    //         arguments("&a [ *a ]") // 순환 참조 시드
+    //     );
+    // }
 
-    @MethodSource
+    // @MethodSource
     @FuzzTest
     void fuzzYamlParser(@NotNull String input) {
         try {

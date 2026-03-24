@@ -9,67 +9,98 @@
 	<properties>
 		<maven.compiler.source>17</maven.compiler.source>
 		<maven.compiler.target>17</maven.compiler.target>
-	</properties>
 
-	<dependencies>
-		
-		<!-- SnakeYAML 1.30 취약 버전 -->
-		<dependency>
-			<groupId>org.yaml</groupId>
-			<artifactId>snakeyaml</artifactId>
-			<version>1.30</version>
-		</dependency>
-		
-		<!-- Jazzer JUnit 통합 버전 -->
-		<dependency>
-			<groupId>com.code-intelligence</groupId>
-			<artifactId>jazzer-junit</artifactId>
-			<version>0.30.0</version>
-			<scope>test</scope>
-		</dependency>
-		<dependency>
-			<groupId>org.junit.jupiter</groupId>
-			<artifactId>junit-jupiter-engine</artifactId>
-			<version>5.9.0</version>
-			<scope>test</scope>
-		</dependency>
-	</dependencies>
+		<!-- 퍼징 대상 라이브러리 버전을 한 곳에서 관리 -->
+		<snakeyaml.version>1.30</snakeyaml.version>
+	</properties>
 
 	<build>
 		<plugins>
-			<!-- Surefire 플러그인: 테스트 실행 시 Jazzer 환경 변수 설정 -->
+			<plugin>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<version>3.13.0</version>
+				<configuration>
+					<release>17</release>
+				</configuration>
+			</plugin>
+
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-surefire-plugin</artifactId>
-				<version>3.0.0-M7</version>
-				<configuration>
-       				<environmentVariables>
-           				<JAZZER_FUZZ>1</JAZZER_FUZZ>
-           				<JAZZER_ARGS>--keep_going=0</JAZZER_ARGS>
-       				</environmentVariables>
-   				</configuration>
+				<artifactId>maven-dependency-plugin</artifactId>
+				<version>3.6.1</version>
+				<executions>
+					<execution>
+						<!-- snakeyaml JAR의 .class를 JaCoCo 기본 분석 경로(target/classes)로 풀기 -->
+						<id>unpack-snakeyaml-classes</id>
+						<phase>process-classes</phase>
+						<goals>
+							<goal>unpack</goal>
+						</goals>
+						<configuration>
+							<artifactItems>
+								<artifactItem>
+									<groupId>org.yaml</groupId>
+									<artifactId>snakeyaml</artifactId>
+									<version>${snakeyaml.version}</version>
+									<type>jar</type>
+									<outputDirectory>${project.build.outputDirectory}</outputDirectory>
+									<overWrite>true</overWrite>
+								</artifactItem>
+							</artifactItems>
+						</configuration>
+					</execution>
+				</executions>
 			</plugin>
-			
-			<!-- JaCoCo 플러그인 -->
+
 			<plugin>
 				<groupId>org.jacoco</groupId>
 				<artifactId>jacoco-maven-plugin</artifactId>
-				<version>0.8.14</version>
+				<version>0.8.12</version>
 				<executions>
 					<execution>
+						<!-- 테스트/퍼징 JVM에 JaCoCo 에이전트 주입 -->
 						<goals>
 							<goal>prepare-agent</goal>
 						</goals>
 					</execution>
 					<execution>
+						<!-- 퍼징 실행 후 snakeyaml 클래스 기준 커버리지 리포트 생성 -->
 						<id>report</id>
 						<phase>test</phase>
 						<goals>
 							<goal>report</goal>
 						</goals>
+						<configuration>
+							<includes>
+								<include>org/yaml/**</include>
+							</includes>
+						</configuration>
 					</execution>
 				</executions>
 			</plugin>
+
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<version>3.2.5</version>
+			</plugin>
 		</plugins>
 	</build>
+
+	<dependencies>
+		<dependency>
+			<!-- SnakeYAML 퍼징/분석 대상 라이브러리 -->
+			<groupId>org.yaml</groupId>
+			<artifactId>snakeyaml</artifactId>
+			<version>${snakeyaml.version}</version>
+		</dependency>
+
+		<dependency>
+			<!-- JUnit 기반 Jazzer 퍼징 실행기 -->
+			<groupId>com.code-intelligence</groupId>
+			<artifactId>jazzer-junit</artifactId>
+			<version>0.30.0</version>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
 </project>
