@@ -1,6 +1,9 @@
 # Maven build output
 /target/
 
+# but don't exclude jacoco report
+!/target/site/
+
 # Java compiled files
 *.class
 
@@ -38,3 +41,6 @@ replay_pid*
 # OS files
 .DS_Store
 Thumbs.db
+
+# jazzer corpus
+.cifuzz-corpus\com.example.SnakeYamlFuzzTest\fuzzYamlParser
