@@ -21,6 +21,7 @@
 				<version>3.13.0</version>
 				<configuration>
 					<release>17</release>
+					<encoding>UTF-8</encoding>
 				</configuration>
 			</plugin>
 
@@ -85,8 +86,12 @@
 				<version>3.0.0-M7</version>
 				<configuration>
           			<testFailureIgnore>true</testFailureIgnore>
+					Jazzer 퍼징 환경 변수
+					<!-- 이 설정은 mvn 빌드 명령어만으로도 적용할 수 있으나, 노파심에 여기에도 설정함 -->
 					<environmentVariables>
+						<!-- Jazzer 퍼징 모드 활성화 -->
             			<JAZZER_FUZZ>1</JAZZER_FUZZ>
+						<!-- Jazzer가 크래시를 발견하더라도 다른 종료조건을 만족시키지 않는 한 계속 실행 -->
             			<JAZZER_ARGS>--keep_going=0</JAZZER_ARGS>
         			</environmentVariables>
         		</configuration>
