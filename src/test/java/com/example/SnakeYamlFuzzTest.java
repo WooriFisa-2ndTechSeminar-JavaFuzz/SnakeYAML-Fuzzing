@@ -36,7 +36,7 @@ class SnakeYamlFuzzTest {
     }
 
     @MethodSource // 이 클래스와 같은 이름의 스태틱 메서드의 반환값을 시드로 입력받음
-    @FuzzTest(maxDuration = "10m") // Jazzer 그레이박스 퍼징 실행(최대 19분)
+    @FuzzTest(maxDuration = "10m") // Jazzer 그레이박스 퍼징 실행(최대 10분)
     void fuzzYamlParser(@NotNull String input) {
         try {
             Yaml yaml = new Yaml();
