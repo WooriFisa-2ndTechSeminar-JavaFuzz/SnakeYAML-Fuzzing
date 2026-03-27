@@ -1,8 +1,9 @@
 # Maven build output
-/target/
+/target/*
 
-# but don't exclude jacoco report
+# Keep JaCoCo site report tracked
 !/target/site/
+!/target/site/**
 
 # Java compiled files
 *.class
