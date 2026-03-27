@@ -1,9 +1,15 @@
 # Maven build output
 /target/*
 
+# !Caution - 반드시 확인 후 커밋할 것
 # Keep JaCoCo site report tracked
 !/target/site/
 !/target/site/**
+
+# !Caution - 반드시 확인 후 커밋할 것
+# Keep error message while reproducing crashes
+!/target/surefire-reports/
+!/target/surefire-reports/**
 
 # Java compiled files
 *.class
