@@ -1,119 +1,87 @@
 <project xmlns="https://maven.apache.org/POM/4.0.0"
-	xmlns:xsi="https://www.w3.org/2001/XMLSchema-instance"
-	xsi:schemaLocation="https://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-	<modelVersion>4.0.0</modelVersion>
-	<groupId>com.example</groupId>
-	<artifactId>SnakeYAML-Fuzzing</artifactId>
-	<version>0.0.1-SNAPSHOT</version>
+    xmlns:xsi="https://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="https://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.example</groupId>
+    <artifactId>SnakeYAML-Fuzzing</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
 
-	<properties>
-		<maven.compiler.source>17</maven.compiler.source>
-		<maven.compiler.target>17</maven.compiler.target>
+    <properties>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+    </properties>
 
-		<!-- 퍼징 대상 라이브러리 버전을 한 곳에서 관리 -->
-		<snakeyaml.version>1.30</snakeyaml.version>
-	</properties>
+    <build>
+        <sourceDirectory>src/java</sourceDirectory>
+        <testSourceDirectory>src/test/java</testSourceDirectory>
+        <plugins>
+            <plugin>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration>
+                    <release>17</release>
+                    <encoding>UTF-8</encoding>
+                </configuration>
+            </plugin>
 
-	<build>
-		<plugins>
-			<plugin>
-				<artifactId>maven-compiler-plugin</artifactId>
-				<version>3.13.0</version>
-				<configuration>
-					<release>17</release>
-					<encoding>UTF-8</encoding>
-				</configuration>
-			</plugin>
+			<!-- JaCoCo 플러그인 -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                        <configuration>
+                            <includes>
+                                <include>org/yaml/**</include>
+                            </includes>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
 
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-dependency-plugin</artifactId>
-				<version>3.6.1</version>
-				<executions>
-					<execution>
-						<!-- snakeyaml JAR의 .class를 JaCoCo 기본 분석 경로(target/classes)로 풀기 -->
-						<id>unpack-snakeyaml-classes</id>
-						<phase>process-classes</phase>
-						<goals>
-							<goal>unpack</goal>
-						</goals>
-						<configuration>
-							<artifactItems>
-								<artifactItem>
-									<groupId>org.yaml</groupId>
-									<artifactId>snakeyaml</artifactId>
-									<version>${snakeyaml.version}</version>
-									<type>jar</type>
-									<outputDirectory>${project.build.outputDirectory}</outputDirectory>
-									<overWrite>true</overWrite>
-								</artifactItem>
-							</artifactItems>
-						</configuration>
-					</execution>
-				</executions>
-			</plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.0.0-M7</version>
+                <configuration>
+					<!-- 테스트 과정에서 실패가 발생해도 무시하도 계속 진행 -->
+                    <testFailureIgnore>true</testFailureIgnore>
+                    <environmentVariables>
+						<!-- 1: 퍼징 모드, 디폴트: 회귀테스트 모드 -->
+                        <JAZZER_FUZZ>1</JAZZER_FUZZ>
+						<!-- 테스트에 한 번 실패해도 계속 진행 -->
+                        <JAZZER_ARGS>--keep_going=0</JAZZER_ARGS>
+                    </environmentVariables>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 
-			<plugin>
-				<groupId>org.jacoco</groupId>
-				<artifactId>jacoco-maven-plugin</artifactId>
-				<version>0.8.12</version>
-				<executions>
-					<execution>
-						<!-- 테스트/퍼징 JVM에 JaCoCo 에이전트 주입 -->
-						<goals>
-							<goal>prepare-agent</goal>
-						</goals>
-					</execution>
-					<execution>
-						<!-- 퍼징 실행 후 snakeyaml 클래스 기준 커버리지 리포트 생성 -->
-						<id>report</id>
-						<phase>test</phase>
-						<goals>
-							<goal>report</goal>
-						</goals>
-						<configuration>
-							<includes>
-								<include>org/yaml/**</include>
-							</includes>
-						</configuration>
-					</execution>
-				</executions>
-			</plugin>
+    <dependencies>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <version>5.9.0</version>
+            <scope>test</scope>
+        </dependency>
 
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-surefire-plugin</artifactId>
-				<version>3.0.0-M7</version>
-				<configuration>
-          			<testFailureIgnore>true</testFailureIgnore>
-					Jazzer 퍼징 환경 변수
-					<!-- 이 설정은 mvn 빌드 명령어만으로도 적용할 수 있으나, 노파심에 여기에도 설정함 -->
-					<environmentVariables>
-						<!-- Jazzer 퍼징 모드 활성화 -->
-						<!-- 회귀테스트시에는 지울 것 -->
-            			<JAZZER_FUZZ>1</JAZZER_FUZZ>
-						<!-- Jazzer가 크래시를 발견하더라도 다른 종료조건을 만족시키지 않는 한 계속 실행 -->
-            			<JAZZER_ARGS>--keep_going=0</JAZZER_ARGS>
-        			</environmentVariables>
-        		</configuration>
-			</plugin>
-		</plugins>
-	</build>
-
-	<dependencies>
-		<dependency>
-			<!-- SnakeYAML 퍼징/분석 대상 라이브러리 -->
-			<groupId>org.yaml</groupId>
-			<artifactId>snakeyaml</artifactId>
-			<version>${snakeyaml.version}</version>
-		</dependency>
-
-		<dependency>
-			<!-- JUnit 기반 Jazzer 퍼징 실행기 -->
-			<groupId>com.code-intelligence</groupId>
-			<artifactId>jazzer-junit</artifactId>
-			<version>0.30.0</version>
-			<scope>test</scope>
-		</dependency>
-	</dependencies>
+		<!-- Jazzer JUnit 통합 버전 -->
+        <dependency>
+            <groupId>com.code-intelligence</groupId>
+            <artifactId>jazzer-junit</artifactId>
+            <version>0.30.0</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
 </project>
