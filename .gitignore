@@ -42,6 +42,3 @@ replay_pid*
 # OS files
 .DS_Store
 Thumbs.db
-
-# jazzer corpus
-.cifuzz-corpus\com.example.SnakeYamlFuzzTest\fuzzYamlParser
