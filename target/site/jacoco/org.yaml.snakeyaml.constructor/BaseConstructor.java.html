@@ -1,0 +1,615 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BaseConstructor.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.constructor</a> &gt; <span class="el_source">BaseConstructor.java</span></div><h1>BaseConstructor.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.constructor;
+
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.TypeDescription;
+import org.yaml.snakeyaml.composer.Composer;
+import org.yaml.snakeyaml.composer.ComposerException;
+import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.introspector.PropertyUtils;
+import org.yaml.snakeyaml.nodes.CollectionNode;
+import org.yaml.snakeyaml.nodes.MappingNode;
+import org.yaml.snakeyaml.nodes.Node;
+import org.yaml.snakeyaml.nodes.NodeId;
+import org.yaml.snakeyaml.nodes.NodeTuple;
+import org.yaml.snakeyaml.nodes.ScalarNode;
+import org.yaml.snakeyaml.nodes.SequenceNode;
+import org.yaml.snakeyaml.nodes.Tag;
+
+import java.lang.reflect.Array;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.SortedSet;
+import java.util.TreeMap;
+import java.util.TreeSet;
+
+public abstract class BaseConstructor {
+    /**
+     * It maps the node kind to the the Construct implementation. When the
+     * runtime class is known then the implicit tag is ignored.
+     */
+<span class="fc" id="L56">    protected final Map&lt;NodeId, Construct&gt; yamlClassConstructors = new EnumMap&lt;NodeId, Construct&gt;(</span>
+<span class="fc" id="L57">            NodeId.class);</span>
+    /**
+     * It maps the (explicit or implicit) tag to the Construct implementation.
+     * It is used:
+     * 1) explicit tag - if present.
+     * 2) implicit tag - when the runtime class of the instance is unknown (the
+     * node has the Object.class)
+     */
+<span class="fc" id="L65">    protected final Map&lt;Tag, Construct&gt; yamlConstructors = new HashMap&lt;Tag, Construct&gt;();</span>
+    /**
+     * It maps the (explicit or implicit) tag to the Construct implementation.
+     * It is used when no exact match found.
+     */
+<span class="fc" id="L70">    protected final Map&lt;String, Construct&gt; yamlMultiConstructors = new HashMap&lt;String, Construct&gt;();</span>
+
+    protected Composer composer;
+    final Map&lt;Node, Object&gt; constructedObjects;
+    private final Set&lt;Node&gt; recursiveObjects;
+    private final ArrayList&lt;RecursiveTuple&lt;Map&lt;Object, Object&gt;, RecursiveTuple&lt;Object, Object&gt;&gt;&gt; maps2fill;
+    private final ArrayList&lt;RecursiveTuple&lt;Set&lt;Object&gt;, Object&gt;&gt; sets2fill;
+
+    protected Tag rootTag;
+    private PropertyUtils propertyUtils;
+    private boolean explicitPropertyUtils;
+<span class="fc" id="L81">    private boolean allowDuplicateKeys = true;</span>
+<span class="fc" id="L82">    private boolean wrappedToRootException = false;</span>
+
+<span class="fc" id="L84">    private boolean enumCaseSensitive = false;</span>
+
+    protected final Map&lt;Class&lt;? extends Object&gt;, TypeDescription&gt; typeDefinitions;
+    protected final Map&lt;Tag, Class&lt;? extends Object&gt;&gt; typeTags;
+
+    protected LoaderOptions loadingConfig;
+
+    public BaseConstructor() {
+<span class="nc" id="L92">        this(new LoaderOptions());</span>
+<span class="nc" id="L93">    }</span>
+
+<span class="fc" id="L95">    public BaseConstructor(LoaderOptions loadingConfig) {</span>
+<span class="fc" id="L96">        constructedObjects = new HashMap&lt;Node, Object&gt;();</span>
+<span class="fc" id="L97">        recursiveObjects = new HashSet&lt;Node&gt;();</span>
+<span class="fc" id="L98">        maps2fill = new ArrayList&lt;RecursiveTuple&lt;Map&lt;Object, Object&gt;, RecursiveTuple&lt;Object, Object&gt;&gt;&gt;();</span>
+<span class="fc" id="L99">        sets2fill = new ArrayList&lt;RecursiveTuple&lt;Set&lt;Object&gt;, Object&gt;&gt;();</span>
+<span class="fc" id="L100">        typeDefinitions = new HashMap&lt;Class&lt;? extends Object&gt;, TypeDescription&gt;();</span>
+<span class="fc" id="L101">        typeTags = new HashMap&lt;Tag, Class&lt;? extends Object&gt;&gt;();</span>
+
+<span class="fc" id="L103">        rootTag = null;</span>
+<span class="fc" id="L104">        explicitPropertyUtils = false;</span>
+
+<span class="fc" id="L106">        typeDefinitions.put(SortedMap.class, new TypeDescription(SortedMap.class, Tag.OMAP,</span>
+<span class="fc" id="L107">                TreeMap.class));</span>
+<span class="fc" id="L108">        typeDefinitions.put(SortedSet.class, new TypeDescription(SortedSet.class, Tag.SET,</span>
+<span class="fc" id="L109">                TreeSet.class));</span>
+<span class="fc" id="L110">        this.loadingConfig = loadingConfig;</span>
+<span class="fc" id="L111">    }</span>
+
+    public void setComposer(Composer composer) {
+<span class="fc" id="L114">        this.composer = composer;</span>
+<span class="fc" id="L115">    }</span>
+
+    /**
+     * Check if more documents available
+     *
+     * @return true when there are more YAML documents in the stream
+     */
+    public boolean checkData() {
+        // If there are more documents available?
+<span class="nc" id="L124">        return composer.checkNode();</span>
+    }
+
+    /**
+     * Construct and return the next document
+     *
+     * @return constructed instance
+     */
+    public Object getData() throws NoSuchElementException {
+        // Construct and return the next document.
+<span class="nc bnc" id="L134" title="All 2 branches missed.">        if (!composer.checkNode()) throw new NoSuchElementException(&quot;No document is available.&quot;);</span>
+<span class="nc" id="L135">        Node node = composer.getNode();</span>
+<span class="nc bnc" id="L136" title="All 2 branches missed.">        if (rootTag != null) {</span>
+<span class="nc" id="L137">            node.setTag(rootTag);</span>
+        }
+<span class="nc" id="L139">        return constructDocument(node);</span>
+    }
+
+    /**
+     * Ensure that the stream contains a single document and construct it
+     *
+     * @param type the class of the instance being created
+     * @return constructed instance
+     * @throws ComposerException in case there are more documents in the stream
+     */
+    public Object getSingleData(Class&lt;?&gt; type) {
+        // Ensure that the stream contains a single document and construct it
+<span class="fc" id="L151">        final Node node = composer.getSingleNode();</span>
+<span class="fc bfc" id="L152" title="All 4 branches covered.">        if (node != null &amp;&amp; !Tag.NULL.equals(node.getTag())) {</span>
+<span class="pc bpc" id="L153" title="1 of 2 branches missed.">            if (Object.class != type) {</span>
+<span class="nc" id="L154">                node.setTag(new Tag(type));</span>
+<span class="pc bpc" id="L155" title="1 of 2 branches missed.">            } else if (rootTag != null) {</span>
+<span class="nc" id="L156">                node.setTag(rootTag);</span>
+            }
+<span class="fc" id="L158">            return constructDocument(node);</span>
+        } else {
+<span class="fc" id="L160">            Construct construct = yamlConstructors.get(Tag.NULL);</span>
+<span class="fc" id="L161">            return construct.construct(node);</span>
+        }
+    }
+
+    /**
+     * Construct complete YAML document. Call the second step in case of
+     * recursive structures. At the end cleans all the state.
+     *
+     * @param node root Node
+     * @return Java instance
+     */
+    protected final Object constructDocument(Node node) {
+        try {
+<span class="fc" id="L174">            Object data = constructObject(node);</span>
+<span class="fc" id="L175">            fillRecursive();</span>
+<span class="fc" id="L176">            return data;</span>
+<span class="fc" id="L177">        } catch (RuntimeException e) {</span>
+<span class="pc bpc" id="L178" title="3 of 4 branches missed.">            if (wrappedToRootException &amp;&amp; !(e instanceof YAMLException)) {</span>
+<span class="nc" id="L179">                throw new YAMLException(e);</span>
+            } else {
+<span class="fc" id="L181">                throw e;</span>
+            }
+        } finally {
+            //clean up resources
+<span class="fc" id="L185">            constructedObjects.clear();</span>
+<span class="fc" id="L186">            recursiveObjects.clear();</span>
+        }
+    }
+
+    /**
+     * Fill the recursive structures and clean the internal collections
+     */
+    private void fillRecursive() {
+<span class="pc bpc" id="L194" title="1 of 2 branches missed.">        if (!maps2fill.isEmpty()) {</span>
+<span class="nc bnc" id="L195" title="All 2 branches missed.">            for (RecursiveTuple&lt;Map&lt;Object, Object&gt;, RecursiveTuple&lt;Object, Object&gt;&gt; entry : maps2fill) {</span>
+<span class="nc" id="L196">                RecursiveTuple&lt;Object, Object&gt; key_value = entry._2();</span>
+<span class="nc" id="L197">                entry._1().put(key_value._1(), key_value._2());</span>
+            }
+<span class="nc" id="L199">            maps2fill.clear();</span>
+        }
+<span class="pc bpc" id="L201" title="1 of 2 branches missed.">        if (!sets2fill.isEmpty()) {</span>
+<span class="nc bnc" id="L202" title="All 2 branches missed.">            for (RecursiveTuple&lt;Set&lt;Object&gt;, Object&gt; value : sets2fill) {</span>
+<span class="nc" id="L203">                value._1().add(value._2());</span>
+            }
+<span class="nc" id="L205">            sets2fill.clear();</span>
+        }
+<span class="fc" id="L207">    }</span>
+
+    /**
+     * Construct object from the specified Node. Return existing instance if the
+     * node is already constructed.
+     *
+     * @param node Node to be constructed
+     * @return Java instance
+     */
+    protected Object constructObject(Node node) {
+<span class="fc bfc" id="L217" title="All 2 branches covered.">        if (constructedObjects.containsKey(node)) {</span>
+<span class="fc" id="L218">            return constructedObjects.get(node);</span>
+        }
+<span class="fc" id="L220">        return constructObjectNoCheck(node);</span>
+    }
+
+    protected Object constructObjectNoCheck(Node node) {
+<span class="pc bpc" id="L224" title="1 of 2 branches missed.">        if (recursiveObjects.contains(node)) {</span>
+<span class="nc" id="L225">            throw new ConstructorException(null, null, &quot;found unconstructable recursive node&quot;,</span>
+<span class="nc" id="L226">                    node.getStartMark());</span>
+        }
+<span class="fc" id="L228">        recursiveObjects.add(node);</span>
+<span class="fc" id="L229">        Construct constructor = getConstructor(node);</span>
+<span class="pc bpc" id="L230" title="1 of 2 branches missed.">        Object data = (constructedObjects.containsKey(node)) ? constructedObjects.get(node)</span>
+<span class="fc" id="L231">                : constructor.construct(node);</span>
+
+<span class="fc" id="L233">        finalizeConstruction(node, data);</span>
+<span class="fc" id="L234">        constructedObjects.put(node, data);</span>
+<span class="fc" id="L235">        recursiveObjects.remove(node);</span>
+<span class="fc bfc" id="L236" title="All 2 branches covered.">        if (node.isTwoStepsConstruction()) {</span>
+<span class="fc" id="L237">            constructor.construct2ndStep(node, data);</span>
+        }
+<span class="fc" id="L239">        return data;</span>
+    }
+
+    /**
+     * Get the constructor to construct the Node. For implicit tags if the
+     * runtime class is known a dedicated Construct implementation is used.
+     * Otherwise the constructor is chosen by the tag.
+     *
+     * @param node {@link Node} to construct an instance from
+     * @return {@link Construct} implementation for the specified node
+     */
+    protected Construct getConstructor(Node node) {
+<span class="fc bfc" id="L251" title="All 2 branches covered.">        if (node.useClassConstructor()) {</span>
+<span class="fc" id="L252">            return yamlClassConstructors.get(node.getNodeId());</span>
+        } else {
+<span class="fc" id="L254">            Construct constructor = yamlConstructors.get(node.getTag());</span>
+<span class="fc bfc" id="L255" title="All 2 branches covered.">            if (constructor == null) {</span>
+<span class="pc bpc" id="L256" title="1 of 2 branches missed.">                for (String prefix : yamlMultiConstructors.keySet()) {</span>
+<span class="nc bnc" id="L257" title="All 2 branches missed.">                    if (node.getTag().startsWith(prefix)) {</span>
+<span class="nc" id="L258">                        return yamlMultiConstructors.get(prefix);</span>
+                    }
+                }
+<span class="fc" id="L261">                return yamlConstructors.get(null);</span>
+            }
+<span class="fc" id="L263">            return constructor;</span>
+        }
+    }
+
+    protected String constructScalar(ScalarNode node) {
+<span class="fc" id="L268">        return node.getValue();</span>
+    }
+
+    // &gt;&gt;&gt;&gt; DEFAULTS &gt;&gt;&gt;&gt;
+    protected List&lt;Object&gt; createDefaultList(int initSize) {
+<span class="fc" id="L273">        return new ArrayList&lt;Object&gt;(initSize);</span>
+    }
+
+    protected Set&lt;Object&gt; createDefaultSet(int initSize) {
+<span class="fc" id="L277">        return new LinkedHashSet&lt;Object&gt;(initSize);</span>
+    }
+
+    protected Map&lt;Object, Object&gt; createDefaultMap(int initSize) {
+        // respect order from YAML document
+<span class="fc" id="L282">        return new LinkedHashMap&lt;Object, Object&gt;(initSize);</span>
+    }
+
+    protected Object createArray(Class&lt;?&gt; type, int size) {
+<span class="fc" id="L286">        return Array.newInstance(type.getComponentType(), size);</span>
+    }
+
+    // &lt;&lt;&lt;&lt; DEFAULTS &lt;&lt;&lt;&lt;
+
+    protected Object finalizeConstruction(Node node, Object data) {
+<span class="fc" id="L292">        final Class&lt;? extends Object&gt; type = node.getType();</span>
+<span class="fc bfc" id="L293" title="All 2 branches covered.">        if (typeDefinitions.containsKey(type)) {</span>
+<span class="fc" id="L294">            return typeDefinitions.get(type).finalizeConstruction(data);</span>
+        }
+<span class="fc" id="L296">        return data;</span>
+    }
+
+    // &gt;&gt;&gt;&gt; NEW instance
+    protected Object newInstance(Node node) {
+        try {
+<span class="fc" id="L302">            return newInstance(Object.class, node);</span>
+<span class="fc" id="L303">        } catch (InstantiationException e) {</span>
+<span class="fc" id="L304">            throw new YAMLException(e);</span>
+        }
+    }
+
+    final protected Object newInstance(Class&lt;?&gt; ancestor, Node node) throws InstantiationException {
+<span class="fc" id="L309">        return newInstance(ancestor, node, true);</span>
+    }
+
+    protected Object newInstance(Class&lt;?&gt; ancestor, Node node, boolean tryDefault)
+            throws InstantiationException {
+<span class="fc" id="L314">        final Class&lt;? extends Object&gt; type = node.getType();</span>
+<span class="fc bfc" id="L315" title="All 2 branches covered.">        if (typeDefinitions.containsKey(type)) {</span>
+<span class="fc" id="L316">            TypeDescription td = typeDefinitions.get(type);</span>
+<span class="fc" id="L317">            final Object instance = td.newInstance(node);</span>
+<span class="pc bpc" id="L318" title="1 of 2 branches missed.">            if (instance != null) {</span>
+<span class="nc" id="L319">                return instance;</span>
+            }
+        }
+<span class="fc bfc" id="L322" title="All 2 branches covered.">        if (tryDefault) {</span>
+            /*
+             * Removed &lt;code&gt; have InstantiationException in case of abstract
+             * type
+             */
+<span class="fc bfc" id="L327" title="All 4 branches covered.">            if (ancestor.isAssignableFrom(type) &amp;&amp; !Modifier.isAbstract(type.getModifiers())) {</span>
+                try {
+<span class="fc" id="L329">                    java.lang.reflect.Constructor&lt;?&gt; c = type.getDeclaredConstructor();</span>
+<span class="fc" id="L330">                    c.setAccessible(true);</span>
+<span class="fc" id="L331">                    return c.newInstance();</span>
+<span class="fc" id="L332">                } catch (NoSuchMethodException e) {</span>
+<span class="fc" id="L333">                    throw new InstantiationException(&quot;NoSuchMethodException:&quot;</span>
+<span class="fc" id="L334">                            + e.getLocalizedMessage());</span>
+<span class="nc" id="L335">                } catch (Exception e) {</span>
+<span class="nc" id="L336">                    throw new YAMLException(e);</span>
+                }
+            }
+        }
+<span class="fc" id="L340">        throw new InstantiationException();</span>
+    }
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    protected Set&lt;Object&gt; newSet(CollectionNode&lt;?&gt; node) {
+        try {
+<span class="nc" id="L346">            return (Set&lt;Object&gt;) newInstance(Set.class, node);</span>
+<span class="fc" id="L347">        } catch (InstantiationException e) {</span>
+<span class="fc" id="L348">            return createDefaultSet(node.getValue().size());</span>
+        }
+    }
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    protected List&lt;Object&gt; newList(SequenceNode node) {
+        try {
+<span class="nc" id="L355">            return (List&lt;Object&gt;) newInstance(List.class, node);</span>
+<span class="fc" id="L356">        } catch (InstantiationException e) {</span>
+<span class="fc" id="L357">            return createDefaultList(node.getValue().size());</span>
+        }
+    }
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    protected Map&lt;Object, Object&gt; newMap(MappingNode node) {
+        try {
+<span class="nc" id="L364">            return (Map&lt;Object, Object&gt;) newInstance(Map.class, node);</span>
+<span class="fc" id="L365">        } catch (InstantiationException e) {</span>
+<span class="fc" id="L366">            return createDefaultMap(node.getValue().size());</span>
+        }
+    }
+
+    // &lt;&lt;&lt;&lt; NEW instance
+
+    // &gt;&gt;&gt;&gt; Construct =&gt; NEW, 2ndStep(filling)
+    protected List&lt;? extends Object&gt; constructSequence(SequenceNode node) {
+<span class="fc" id="L374">        List&lt;Object&gt; result = newList(node);</span>
+<span class="fc" id="L375">        constructSequenceStep2(node, result);</span>
+<span class="fc" id="L376">        return result;</span>
+    }
+
+    protected Set&lt;? extends Object&gt; constructSet(SequenceNode node) {
+<span class="nc" id="L380">        Set&lt;Object&gt; result = newSet(node);</span>
+<span class="nc" id="L381">        constructSequenceStep2(node, result);</span>
+<span class="nc" id="L382">        return result;</span>
+    }
+
+    protected Object constructArray(SequenceNode node) {
+<span class="fc" id="L386">        return constructArrayStep2(node, createArray(node.getType(), node.getValue().size()));</span>
+    }
+
+    protected void constructSequenceStep2(SequenceNode node, Collection&lt;Object&gt; collection) {
+<span class="fc bfc" id="L390" title="All 2 branches covered.">        for (Node child : node.getValue()) {</span>
+<span class="fc" id="L391">            collection.add(constructObject(child));</span>
+        }
+<span class="fc" id="L393">    }</span>
+
+    protected Object constructArrayStep2(SequenceNode node, Object array) {
+<span class="fc" id="L396">        final Class&lt;?&gt; componentType = node.getType().getComponentType();</span>
+
+<span class="fc" id="L398">        int index = 0;</span>
+<span class="fc bfc" id="L399" title="All 2 branches covered.">        for (Node child : node.getValue()) {</span>
+            // Handle multi-dimensional arrays...
+<span class="pc bpc" id="L401" title="1 of 2 branches missed.">            if (child.getType() == Object.class) {</span>
+<span class="fc" id="L402">                child.setType(componentType);</span>
+            }
+
+<span class="fc" id="L405">            final Object value = constructObject(child);</span>
+
+<span class="pc bpc" id="L407" title="1 of 2 branches missed.">            if (componentType.isPrimitive()) {</span>
+                // Null values are disallowed for primitives
+<span class="nc bnc" id="L409" title="All 2 branches missed.">                if (value == null) {</span>
+<span class="nc" id="L410">                    throw new NullPointerException(</span>
+<span class="nc" id="L411">                            &quot;Unable to construct element value for &quot; + child);</span>
+                }
+
+                // Primitive arrays require quite a lot of work.
+<span class="nc bnc" id="L415" title="All 2 branches missed.">                if (byte.class.equals(componentType)) {</span>
+<span class="nc" id="L416">                    Array.setByte(array, index, ((Number) value).byteValue());</span>
+
+<span class="nc bnc" id="L418" title="All 2 branches missed.">                } else if (short.class.equals(componentType)) {</span>
+<span class="nc" id="L419">                    Array.setShort(array, index, ((Number) value).shortValue());</span>
+
+<span class="nc bnc" id="L421" title="All 2 branches missed.">                } else if (int.class.equals(componentType)) {</span>
+<span class="nc" id="L422">                    Array.setInt(array, index, ((Number) value).intValue());</span>
+
+<span class="nc bnc" id="L424" title="All 2 branches missed.">                } else if (long.class.equals(componentType)) {</span>
+<span class="nc" id="L425">                    Array.setLong(array, index, ((Number) value).longValue());</span>
+
+<span class="nc bnc" id="L427" title="All 2 branches missed.">                } else if (float.class.equals(componentType)) {</span>
+<span class="nc" id="L428">                    Array.setFloat(array, index, ((Number) value).floatValue());</span>
+
+<span class="nc bnc" id="L430" title="All 2 branches missed.">                } else if (double.class.equals(componentType)) {</span>
+<span class="nc" id="L431">                    Array.setDouble(array, index, ((Number) value).doubleValue());</span>
+
+<span class="nc bnc" id="L433" title="All 2 branches missed.">                } else if (char.class.equals(componentType)) {</span>
+<span class="nc" id="L434">                    Array.setChar(array, index, ((Character) value).charValue());</span>
+
+<span class="nc bnc" id="L436" title="All 2 branches missed.">                } else if (boolean.class.equals(componentType)) {</span>
+<span class="nc" id="L437">                    Array.setBoolean(array, index, ((Boolean) value).booleanValue());</span>
+
+<span class="nc" id="L439">                } else {</span>
+<span class="nc" id="L440">                    throw new YAMLException(&quot;unexpected primitive type&quot;);</span>
+                }
+
+            } else {
+                // Non-primitive arrays can simply be assigned:
+<span class="fc" id="L445">                Array.set(array, index, value);</span>
+            }
+
+<span class="fc" id="L448">            ++index;</span>
+        }
+<span class="fc" id="L450">        return array;</span>
+    }
+
+    protected Set&lt;Object&gt; constructSet(MappingNode node) {
+<span class="fc" id="L454">        final Set&lt;Object&gt; set = newSet(node);</span>
+<span class="fc" id="L455">        constructSet2ndStep(node, set);</span>
+<span class="fc" id="L456">        return set;</span>
+    }
+
+    protected Map&lt;Object, Object&gt; constructMapping(MappingNode node) {
+<span class="fc" id="L460">        final Map&lt;Object, Object&gt; mapping = newMap(node);</span>
+<span class="fc" id="L461">        constructMapping2ndStep(node, mapping);</span>
+<span class="fc" id="L462">        return mapping;</span>
+    }
+
+    protected void constructMapping2ndStep(MappingNode node, Map&lt;Object, Object&gt; mapping) {
+<span class="fc" id="L466">        List&lt;NodeTuple&gt; nodeValue = node.getValue();</span>
+<span class="fc bfc" id="L467" title="All 2 branches covered.">        for (NodeTuple tuple : nodeValue) {</span>
+<span class="fc" id="L468">            Node keyNode = tuple.getKeyNode();</span>
+<span class="fc" id="L469">            Node valueNode = tuple.getValueNode();</span>
+<span class="fc" id="L470">            Object key = constructObject(keyNode);</span>
+<span class="fc bfc" id="L471" title="All 2 branches covered.">            if (key != null) {</span>
+                try {
+<span class="fc" id="L473">                    key.hashCode();// check circular dependencies</span>
+<span class="pc" id="L474">                } catch (Exception e) {</span>
+<span class="nc" id="L475">                    throw new ConstructorException(&quot;while constructing a mapping&quot;,</span>
+<span class="nc" id="L476">                            node.getStartMark(), &quot;found unacceptable key &quot; + key,</span>
+<span class="nc" id="L477">                            tuple.getKeyNode().getStartMark(), e);</span>
+                }
+            }
+<span class="fc" id="L480">            Object value = constructObject(valueNode);</span>
+<span class="fc bfc" id="L481" title="All 2 branches covered.">            if (keyNode.isTwoStepsConstruction()) {</span>
+<span class="pc bpc" id="L482" title="1 of 2 branches missed.">                if (loadingConfig.getAllowRecursiveKeys()) {</span>
+<span class="nc" id="L483">                    postponeMapFilling(mapping, key, value);</span>
+<span class="nc" id="L484">                } else {</span>
+<span class="fc" id="L485">                    throw new YAMLException(&quot;Recursive key for mapping is detected but it is not configured to be allowed.&quot;);</span>
+                }
+            } else {
+<span class="fc" id="L488">                mapping.put(key, value);</span>
+            }
+        }
+<span class="fc" id="L491">    }</span>
+
+    /*
+     * if keyObject is created it 2 steps we should postpone putting
+     * it in map because it may have different hash after
+     * initialization compared to clean just created one. And map of
+     * course does not observe key hashCode changes.
+     */
+    protected void postponeMapFilling(Map&lt;Object, Object&gt; mapping, Object key, Object value) {
+<span class="nc" id="L500">        maps2fill.add(0, new RecursiveTuple(mapping, new RecursiveTuple(key, value)));</span>
+<span class="nc" id="L501">    }</span>
+
+    protected void constructSet2ndStep(MappingNode node, Set&lt;Object&gt; set) {
+<span class="fc" id="L504">        List&lt;NodeTuple&gt; nodeValue = node.getValue();</span>
+<span class="fc bfc" id="L505" title="All 2 branches covered.">        for (NodeTuple tuple : nodeValue) {</span>
+<span class="fc" id="L506">            Node keyNode = tuple.getKeyNode();</span>
+<span class="fc" id="L507">            Object key = constructObject(keyNode);</span>
+<span class="pc bpc" id="L508" title="1 of 2 branches missed.">            if (key != null) {</span>
+                try {
+<span class="fc" id="L510">                    key.hashCode();// check circular dependencies</span>
+<span class="pc" id="L511">                } catch (Exception e) {</span>
+<span class="nc" id="L512">                    throw new ConstructorException(&quot;while constructing a Set&quot;, node.getStartMark(),</span>
+<span class="nc" id="L513">                            &quot;found unacceptable key &quot; + key, tuple.getKeyNode().getStartMark(), e);</span>
+                }
+            }
+<span class="pc bpc" id="L516" title="1 of 2 branches missed.">            if (keyNode.isTwoStepsConstruction()) {</span>
+<span class="nc" id="L517">                postponeSetFilling(set, key);</span>
+<span class="nc" id="L518">            } else {</span>
+<span class="fc" id="L519">                set.add(key);</span>
+            }
+        }
+<span class="fc" id="L522">    }</span>
+
+    /*
+     * if keyObject is created it 2 steps we should postpone putting
+     * it into the set because it may have different hash after
+     * initialization compared to clean just created one. And set of
+     * course does not observe value hashCode changes.
+     */
+    protected void postponeSetFilling(Set&lt;Object&gt; set, Object key) {
+<span class="nc" id="L531">        sets2fill.add(0, new RecursiveTuple&lt;Set&lt;Object&gt;, Object&gt;(set, key));</span>
+<span class="nc" id="L532">    }</span>
+
+    public void setPropertyUtils(PropertyUtils propertyUtils) {
+<span class="fc" id="L535">        this.propertyUtils = propertyUtils;</span>
+<span class="fc" id="L536">        explicitPropertyUtils = true;</span>
+<span class="fc" id="L537">        Collection&lt;TypeDescription&gt; tds = typeDefinitions.values();</span>
+<span class="fc bfc" id="L538" title="All 2 branches covered.">        for (TypeDescription typeDescription : tds) {</span>
+<span class="fc" id="L539">            typeDescription.setPropertyUtils(propertyUtils);</span>
+        }
+<span class="fc" id="L541">    }</span>
+
+    public final PropertyUtils getPropertyUtils() {
+<span class="fc bfc" id="L544" title="All 2 branches covered.">        if (propertyUtils == null) {</span>
+<span class="fc" id="L545">            propertyUtils = new PropertyUtils();</span>
+        }
+<span class="fc" id="L547">        return propertyUtils;</span>
+    }
+
+    /**
+     * Make YAML aware how to parse a custom Class. If there is no root Class
+     * assigned in constructor then the 'root' property of this definition is
+     * respected.
+     *
+     * @param definition to be added to the Constructor
+     * @return the previous value associated with &lt;code&gt;definition&lt;/code&gt;, or
+     * &lt;code&gt;null&lt;/code&gt; if there was no mapping for &lt;code&gt;definition&lt;/code&gt;.
+     */
+    public TypeDescription addTypeDescription(TypeDescription definition) {
+<span class="pc bpc" id="L560" title="1 of 2 branches missed.">        if (definition == null) {</span>
+<span class="nc" id="L561">            throw new NullPointerException(&quot;TypeDescription is required.&quot;);</span>
+        }
+<span class="fc" id="L563">        Tag tag = definition.getTag();</span>
+<span class="fc" id="L564">        typeTags.put(tag, definition.getType());</span>
+<span class="fc" id="L565">        definition.setPropertyUtils(getPropertyUtils());</span>
+<span class="fc" id="L566">        return typeDefinitions.put(definition.getType(), definition);</span>
+    }
+
+    private static class RecursiveTuple&lt;T, K&gt; {
+        private final T _1;
+        private final K _2;
+
+<span class="nc" id="L573">        public RecursiveTuple(T _1, K _2) {</span>
+<span class="nc" id="L574">            this._1 = _1;</span>
+<span class="nc" id="L575">            this._2 = _2;</span>
+<span class="nc" id="L576">        }</span>
+
+        public K _2() {
+<span class="nc" id="L579">            return _2;</span>
+        }
+
+        public T _1() {
+<span class="nc" id="L583">            return _1;</span>
+        }
+    }
+
+    public final boolean isExplicitPropertyUtils() {
+<span class="fc" id="L588">        return explicitPropertyUtils;</span>
+    }
+
+    public boolean isAllowDuplicateKeys() {
+<span class="fc" id="L592">        return allowDuplicateKeys;</span>
+    }
+
+    public void setAllowDuplicateKeys(boolean allowDuplicateKeys) {
+<span class="fc" id="L596">        this.allowDuplicateKeys = allowDuplicateKeys;</span>
+<span class="fc" id="L597">    }</span>
+
+    public boolean isWrappedToRootException() {
+<span class="nc" id="L600">        return wrappedToRootException;</span>
+    }
+
+    public void setWrappedToRootException(boolean wrappedToRootException) {
+<span class="fc" id="L604">        this.wrappedToRootException = wrappedToRootException;</span>
+<span class="fc" id="L605">    }</span>
+
+    public boolean isEnumCaseSensitive() {
+<span class="nc" id="L608">        return enumCaseSensitive;</span>
+    }
+
+    public void setEnumCaseSensitive(boolean enumCaseSensitive) {
+<span class="nc" id="L612">        this.enumCaseSensitive = enumCaseSensitive;</span>
+<span class="nc" id="L613">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

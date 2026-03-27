@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ScalarEvent.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.events</a> &gt; <span class="el_source">ScalarEvent.java</span></div><h1>ScalarEvent.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.events;
+
+import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.error.Mark;
+
+/**
+ * Marks a scalar value.
+ */
+public final class ScalarEvent extends NodeEvent {
+    private final String tag;
+    // style flag of a scalar event indicates the style of the scalar. Possible
+    // values are None, '', '\'', '&quot;', '|', '&gt;'
+    private final DumperOptions.ScalarStyle style;
+    private final String value;
+    // The implicit flag of a scalar event is a pair of boolean values that
+    // indicate if the tag may be omitted when the scalar is emitted in a plain
+    // and non-plain style correspondingly.
+    private final ImplicitTuple implicit;
+
+    public ScalarEvent(String anchor, String tag, ImplicitTuple implicit, String value,
+                       Mark startMark, Mark endMark, DumperOptions.ScalarStyle style) {
+<span class="fc" id="L37">        super(anchor, startMark, endMark);</span>
+<span class="fc" id="L38">        this.tag = tag;</span>
+<span class="fc" id="L39">        this.implicit = implicit;</span>
+<span class="pc bpc" id="L40" title="1 of 2 branches missed.">        if (value == null) throw new NullPointerException(&quot;Value must be provided.&quot;);</span>
+<span class="fc" id="L41">        this.value = value;</span>
+<span class="pc bpc" id="L42" title="1 of 2 branches missed.">        if (style == null) throw new NullPointerException(&quot;Style must be provided.&quot;);</span>
+<span class="fc" id="L43">        this.style = style;</span>
+<span class="fc" id="L44">    }</span>
+
+    /*
+     * Existed in older versions but replaced with {@link DumperOptions.ScalarStyle}-based constructor.
+     * Restored in v1.22 for backwards compatibility.
+     * @deprecated Since restored in v1.22.  Use {@link ScalarEvent#ScalarEvent(String, String, ImplicitTuple, String, Mark, Mark, org.yaml.snakeyaml.DumperOptions.ScalarStyle) }.
+     */
+    @Deprecated
+    public ScalarEvent(String anchor, String tag, ImplicitTuple implicit, String value,
+            Mark startMark, Mark endMark, Character style) {
+<span class="nc" id="L54">        this(anchor, tag, implicit, value, startMark, endMark, DumperOptions.ScalarStyle.createStyle(style));</span>
+<span class="nc" id="L55">    }</span>
+    
+    /**
+     * Tag of this scalar.
+     *
+     * @return The tag of this scalar, or &lt;code&gt;null&lt;/code&gt; if no explicit tag
+     *         is available.
+     */
+    public String getTag() {
+<span class="fc" id="L64">        return this.tag;</span>
+    }
+
+    /**
+     * Style of the scalar.
+     * &lt;dl&gt;
+     * &lt;dt&gt;null&lt;/dt&gt;
+     * &lt;dd&gt;Flow Style - Plain&lt;/dd&gt;
+     * &lt;dt&gt;'\''&lt;/dt&gt;
+     * &lt;dd&gt;Flow Style - Single-Quoted&lt;/dd&gt;
+     * &lt;dt&gt;'&quot;'&lt;/dt&gt;
+     * &lt;dd&gt;Flow Style - Double-Quoted&lt;/dd&gt;
+     * &lt;dt&gt;'|'&lt;/dt&gt;
+     * &lt;dd&gt;Block Style - Literal&lt;/dd&gt;
+     * &lt;dt&gt;'&amp;gt;'&lt;/dt&gt;
+     * &lt;dd&gt;Block Style - Folded&lt;/dd&gt;
+     * &lt;/dl&gt;
+     *
+     * @see &lt;a href=&quot;http://yaml.org/spec/1.1/#id864487&quot;&gt;Kind/Style
+     *      Combinations&lt;/a&gt;
+     * @return Style of the scalar.
+     */
+    public DumperOptions.ScalarStyle getScalarStyle() {
+<span class="fc" id="L87">        return this.style;</span>
+    }
+
+    /**
+     * @deprecated use getScalarStyle()  instead
+     * @return char which is a value behind ScalarStyle
+     */
+    @Deprecated
+    public Character getStyle() {
+<span class="nc" id="L96">        return this.style.getChar();</span>
+    }
+
+    /**
+     * String representation of the value.
+     * &lt;p&gt;
+     * Without quotes and escaping.
+     * &lt;/p&gt;
+     *
+     * @return Value as Unicode string.
+     */
+    public String getValue() {
+<span class="fc" id="L108">        return this.value;</span>
+    }
+
+    public ImplicitTuple getImplicit() {
+<span class="fc" id="L112">        return this.implicit;</span>
+    }
+
+    @Override
+    protected String getArguments() {
+<span class="nc" id="L117">        return super.getArguments() + &quot;, tag=&quot; + tag + &quot;, &quot; + implicit + &quot;, value=&quot; + value;</span>
+    }
+
+    @Override
+    public Event.ID getEventId() {
+<span class="fc" id="L122">        return ID.Scalar;</span>
+    }
+
+    public boolean isPlain() {
+<span class="nc bnc" id="L126" title="All 2 branches missed.">        return style == DumperOptions.ScalarStyle.PLAIN;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

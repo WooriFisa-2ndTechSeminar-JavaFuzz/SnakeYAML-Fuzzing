@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>UriEncoder.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.util</a> &gt; <span class="el_source">UriEncoder.java</span></div><h1>UriEncoder.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.util;
+
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CodingErrorAction;
+
+import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.external.com.google.gdata.util.common.base.Escaper;
+import org.yaml.snakeyaml.external.com.google.gdata.util.common.base.PercentEscaper;
+
+<span class="nc" id="L31">public abstract class UriEncoder {</span>
+<span class="fc" id="L32">    private static final CharsetDecoder UTF8Decoder = Charset.forName(&quot;UTF-8&quot;).newDecoder()</span>
+<span class="fc" id="L33">            .onMalformedInput(CodingErrorAction.REPORT);</span>
+    // Include the [] chars to the SAFEPATHCHARS_URLENCODER to avoid
+    // its escape as required by spec. See
+    // http://yaml.org/spec/1.1/#escaping%20in%20URI/
+    private static final String SAFE_CHARS = PercentEscaper.SAFEPATHCHARS_URLENCODER + &quot;[]/&quot;;
+<span class="fc" id="L38">    private static final Escaper escaper = new PercentEscaper(SAFE_CHARS, false);</span>
+
+    /**
+     * Escape special characters with '%'
+     * @param uri URI to be escaped
+     * @return encoded URI
+     */
+    public static String encode(String uri) {
+<span class="fc" id="L46">        return escaper.escape(uri);</span>
+    }
+
+    /**
+     * Decode '%'-escaped characters. Decoding fails in case of invalid UTF-8
+     * @param buff data to decode
+     * @return decoded data
+     * @throws CharacterCodingException if cannot be decoded
+     */
+    public static String decode(ByteBuffer buff) throws CharacterCodingException {
+<span class="fc" id="L56">        CharBuffer chars = UTF8Decoder.decode(buff);</span>
+<span class="fc" id="L57">        return chars.toString();</span>
+    }
+
+    public static String decode(String buff) {
+        try {
+<span class="fc" id="L62">            return URLDecoder.decode(buff, &quot;UTF-8&quot;);</span>
+<span class="nc" id="L63">        } catch (UnsupportedEncodingException e) {</span>
+<span class="nc" id="L64">            throw new YAMLException(e);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

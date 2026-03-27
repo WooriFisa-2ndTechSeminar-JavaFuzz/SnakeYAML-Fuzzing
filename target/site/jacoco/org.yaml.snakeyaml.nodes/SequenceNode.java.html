@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SequenceNode.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.nodes</a> &gt; <span class="el_source">SequenceNode.java</span></div><h1>SequenceNode.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.nodes;
+
+import java.util.List;
+
+import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.error.Mark;
+
+/**
+ * Represents a sequence.
+ * &lt;p&gt;
+ * A sequence is a ordered collection of nodes.
+ * &lt;/p&gt;
+ */
+public class SequenceNode extends CollectionNode&lt;Node&gt; {
+    final private List&lt;Node&gt; value;
+
+    public SequenceNode(Tag tag, boolean resolved, List&lt;Node&gt; value, Mark startMark, Mark endMark,
+                        DumperOptions.FlowStyle flowStyle) {
+<span class="fc" id="L34">        super(tag, startMark, endMark, flowStyle);</span>
+<span class="pc bpc" id="L35" title="1 of 2 branches missed.">        if (value == null) {</span>
+<span class="nc" id="L36">            throw new NullPointerException(&quot;value in a Node is required.&quot;);</span>
+        }
+<span class="fc" id="L38">        this.value = value;</span>
+<span class="fc" id="L39">        this.resolved = resolved;</span>
+<span class="fc" id="L40">    }</span>
+
+    public SequenceNode(Tag tag, List&lt;Node&gt; value, DumperOptions.FlowStyle flowStyle) {
+<span class="nc" id="L43">        this(tag, true, value, null, null, flowStyle);</span>
+<span class="nc" id="L44">    }</span>
+    
+    /*
+     * Existed in older versions but replaced with {@link DumperOptions.SequenceStyle}-based constructor.
+     * Restored in v1.22 for backwards compatibility.
+     * @deprecated Since restored in v1.22.  Use {@link SequenceNode#SequenceNode(Tag, List&lt;Node&gt;, org.yaml.snakeyaml.DumperOptions.FlowStyle) }.
+     */
+    @Deprecated
+    public SequenceNode(Tag tag, List&lt;Node&gt; value, Boolean style) {
+<span class="nc" id="L53">        this(tag, value, DumperOptions.FlowStyle.fromBoolean(style));</span>
+<span class="nc" id="L54">    }</span>
+
+    /*
+     * Existed in older versions but replaced with {@link DumperOptions.SequenceStyle}-based constructor.
+     * Restored in v1.22 for backwards compatibility.
+     * @deprecated Since restored in v1.22.  Use {@link SequenceNode#SequenceNode(Tag, boolean, List&lt;Node&gt;, Mark, Mark, org.yaml.snakeyaml.DumperOptions.FlowStyle) }.
+     */
+    @Deprecated
+    public SequenceNode(Tag tag, boolean resolved, List&lt;Node&gt; value, Mark startMark, Mark endMark,
+              Boolean style) {
+<span class="nc" id="L64">        this(tag, resolved, value, startMark, endMark, DumperOptions.FlowStyle.fromBoolean(style));</span>
+<span class="nc" id="L65">    }</span>
+
+    @Override
+    public NodeId getNodeId() {
+<span class="fc" id="L69">        return NodeId.sequence;</span>
+    }
+
+    /**
+     * Returns the elements in this sequence.
+     * 
+     * @return Nodes in the specified order.
+     */
+    public List&lt;Node&gt; getValue() {
+<span class="fc" id="L78">        return value;</span>
+    }
+
+    public void setListType(Class&lt;? extends Object&gt; listType) {
+<span class="nc bnc" id="L82" title="All 2 branches missed.">        for (Node node : value) {</span>
+<span class="nc" id="L83">            node.setType(listType);</span>
+        }
+<span class="nc" id="L85">    }</span>
+
+    public String toString() {
+<span class="nc" id="L88">        return &quot;&lt;&quot; + this.getClass().getName() + &quot; (tag=&quot; + getTag() + &quot;, value=&quot; + getValue()</span>
+                + &quot;)&gt;&quot;;
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CollectionStartEvent.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.events</a> &gt; <span class="el_source">CollectionStartEvent.java</span></div><h1>CollectionStartEvent.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.events;
+
+import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.error.Mark;
+
+/**
+ * Base class for the start events of the collection nodes.
+ */
+public abstract class CollectionStartEvent extends NodeEvent {
+    private final String tag;
+    // The implicit flag of a collection start event indicates if the tag may be
+    // omitted when the collection is emitted
+    private final boolean implicit;
+    // flag indicates if a collection is block or flow
+    private final DumperOptions.FlowStyle flowStyle;
+
+    public CollectionStartEvent(String anchor, String tag, boolean implicit, Mark startMark,
+            Mark endMark, DumperOptions.FlowStyle flowStyle) {
+<span class="fc" id="L34">        super(anchor, startMark, endMark);</span>
+<span class="fc" id="L35">        this.tag = tag;</span>
+<span class="fc" id="L36">        this.implicit = implicit;</span>
+<span class="pc bpc" id="L37" title="1 of 2 branches missed.">        if(flowStyle == null) throw new NullPointerException(&quot;Flow style must be provided.&quot;);</span>
+<span class="fc" id="L38">        this.flowStyle = flowStyle;</span>
+<span class="fc" id="L39">    }</span>
+    
+    /*
+     * Existed in older versions but replaced with {@link DumperOptions.FlowStyle}-based constructor.
+     * Restored in v1.22 for backwards compatibility.
+     * @deprecated Since restored in v1.22.  Use {@link CollectionStartEvent#CollectionStartEvent(String, String, boolean, Mark, Mark, org.yaml.snakeyaml.DumperOptions.FlowStyle) }.
+     */
+    @Deprecated
+    public CollectionStartEvent(String anchor, String tag, boolean implicit, Mark startMark, 
+            Mark endMark, Boolean flowStyle) {
+<span class="nc" id="L49">        this(anchor, tag, implicit, startMark, endMark, DumperOptions.FlowStyle.fromBoolean(flowStyle));</span>
+<span class="nc" id="L50">    }</span>
+
+    /**
+     * Tag of this collection.
+     * 
+     * @return The tag of this collection, or &lt;code&gt;null&lt;/code&gt; if no explicit
+     *         tag is available.
+     */
+    public String getTag() {
+<span class="fc" id="L59">        return this.tag;</span>
+    }
+
+    /**
+     * &lt;code&gt;true&lt;/code&gt; if the tag can be omitted while this collection is
+     * emitted.
+     * 
+     * @return True if the tag can be omitted while this collection is emitted.
+     */
+    public boolean getImplicit() {
+<span class="fc" id="L69">        return this.implicit;</span>
+    }
+
+    /**
+     * &lt;code&gt;true&lt;/code&gt; if this collection is in flow style, &lt;code&gt;false&lt;/code&gt;
+     * for block style.
+     * 
+     * @return If this collection is in flow style.
+     */
+    public DumperOptions.FlowStyle getFlowStyle() {
+<span class="fc" id="L79">        return this.flowStyle;</span>
+    }
+
+    @Override
+    protected String getArguments() {
+<span class="nc" id="L84">        return super.getArguments() + &quot;, tag=&quot; + tag + &quot;, implicit=&quot; + implicit;</span>
+    }
+
+    public boolean isFlow() {
+<span class="fc bfc" id="L88" title="All 2 branches covered.">        return DumperOptions.FlowStyle.FLOW == flowStyle;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

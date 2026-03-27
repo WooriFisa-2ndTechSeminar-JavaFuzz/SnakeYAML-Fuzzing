@@ -1,0 +1,281 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Representer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.representer</a> &gt; <span class="el_source">Representer.java</span></div><h1>Representer.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.representer;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.DumperOptions.FlowStyle;
+import org.yaml.snakeyaml.TypeDescription;
+import org.yaml.snakeyaml.introspector.Property;
+import org.yaml.snakeyaml.introspector.PropertyUtils;
+import org.yaml.snakeyaml.nodes.MappingNode;
+import org.yaml.snakeyaml.nodes.Node;
+import org.yaml.snakeyaml.nodes.NodeId;
+import org.yaml.snakeyaml.nodes.NodeTuple;
+import org.yaml.snakeyaml.nodes.ScalarNode;
+import org.yaml.snakeyaml.nodes.SequenceNode;
+import org.yaml.snakeyaml.nodes.Tag;
+
+/**
+ * Represent JavaBeans
+ */
+public class Representer extends SafeRepresenter {
+
+<span class="pc" id="L46">    protected Map&lt;Class&lt;? extends Object&gt;, TypeDescription&gt; typeDefinitions = Collections</span>
+<span class="pc" id="L47">            .emptyMap();</span>
+
+<span class="fc" id="L49">    public Representer() {</span>
+<span class="fc" id="L50">        this.representers.put(null, new RepresentJavaBean());</span>
+<span class="fc" id="L51">    }</span>
+
+    public Representer(DumperOptions options) {
+<span class="nc" id="L54">        super(options);</span>
+<span class="nc" id="L55">        this.representers.put(null, new RepresentJavaBean());</span>
+<span class="nc" id="L56">    }</span>
+
+    public TypeDescription addTypeDescription(TypeDescription td) {
+<span class="nc bnc" id="L59" title="All 2 branches missed.">        if (Collections.EMPTY_MAP == typeDefinitions) {</span>
+<span class="nc" id="L60">            typeDefinitions = new HashMap&lt;Class&lt;? extends Object&gt;, TypeDescription&gt;();</span>
+        }
+<span class="nc bnc" id="L62" title="All 2 branches missed.">        if (td.getTag() != null) {</span>
+<span class="nc" id="L63">            addClassTag(td.getType(), td.getTag());</span>
+        }
+<span class="nc" id="L65">        td.setPropertyUtils(getPropertyUtils());</span>
+<span class="nc" id="L66">        return typeDefinitions.put(td.getType(), td);</span>
+    }
+
+    @Override
+    public void setPropertyUtils(PropertyUtils propertyUtils) {
+<span class="nc" id="L71">        super.setPropertyUtils(propertyUtils);</span>
+<span class="nc" id="L72">        Collection&lt;TypeDescription&gt; tds = typeDefinitions.values();</span>
+<span class="nc bnc" id="L73" title="All 2 branches missed.">        for (TypeDescription typeDescription : tds) {</span>
+<span class="nc" id="L74">            typeDescription.setPropertyUtils(propertyUtils);</span>
+        }
+<span class="nc" id="L76">    }</span>
+
+<span class="fc" id="L78">    protected class RepresentJavaBean implements Represent {</span>
+        public Node representData(Object data) {
+<span class="nc" id="L80">            return representJavaBean(getProperties(data.getClass()), data);</span>
+        }
+    }
+
+    /**
+     * Tag logic:
+     * - explicit root tag is set in serializer
+     * - if there is a predefined class tag it is used
+     * - a global tag with class name is always used as tag. The JavaBean parent
+     * of the specified JavaBean may set another tag (tag:yaml.org,2002:map)
+     * when the property class is the same as runtime class
+     *
+     * @param properties
+     *            JavaBean getters
+     * @param javaBean
+     *            instance for Node
+     * @return Node to get serialized
+     */
+    protected MappingNode representJavaBean(Set&lt;Property&gt; properties, Object javaBean) {
+<span class="nc" id="L99">        List&lt;NodeTuple&gt; value = new ArrayList&lt;NodeTuple&gt;(properties.size());</span>
+        Tag tag;
+<span class="nc" id="L101">        Tag customTag = classTags.get(javaBean.getClass());</span>
+<span class="nc bnc" id="L102" title="All 2 branches missed.">        tag = customTag != null ? customTag : new Tag(javaBean.getClass());</span>
+        // flow style will be chosen by BaseRepresenter
+<span class="nc" id="L104">        MappingNode node = new MappingNode(tag, value, FlowStyle.AUTO);</span>
+<span class="nc" id="L105">        representedObjects.put(javaBean, node);</span>
+<span class="nc" id="L106">        DumperOptions.FlowStyle bestStyle = FlowStyle.FLOW;</span>
+<span class="nc bnc" id="L107" title="All 2 branches missed.">        for (Property property : properties) {</span>
+<span class="nc" id="L108">            Object memberValue = property.get(javaBean);</span>
+<span class="nc bnc" id="L109" title="All 2 branches missed.">            Tag customPropertyTag = memberValue == null ? null</span>
+<span class="nc" id="L110">                    : classTags.get(memberValue.getClass());</span>
+<span class="nc" id="L111">            NodeTuple tuple = representJavaBeanProperty(javaBean, property, memberValue,</span>
+<span class="nc" id="L112">                    customPropertyTag);</span>
+<span class="nc bnc" id="L113" title="All 2 branches missed.">            if (tuple == null) {</span>
+<span class="nc" id="L114">                continue;</span>
+            }
+<span class="nc bnc" id="L116" title="All 2 branches missed.">            if (!((ScalarNode) tuple.getKeyNode()).isPlain()) {</span>
+<span class="nc" id="L117">                bestStyle = FlowStyle.BLOCK;</span>
+            }
+<span class="nc" id="L119">            Node nodeValue = tuple.getValueNode();</span>
+<span class="nc bnc" id="L120" title="All 4 branches missed.">            if (!(nodeValue instanceof ScalarNode &amp;&amp; ((ScalarNode) nodeValue).isPlain())) {</span>
+<span class="nc" id="L121">                bestStyle = FlowStyle.BLOCK;</span>
+            }
+<span class="nc" id="L123">            value.add(tuple);</span>
+        }
+<span class="nc bnc" id="L125" title="All 2 branches missed.">        if (defaultFlowStyle != FlowStyle.AUTO) {</span>
+<span class="nc" id="L126">            node.setFlowStyle(defaultFlowStyle);</span>
+<span class="nc" id="L127">        } else {</span>
+<span class="nc" id="L128">            node.setFlowStyle(bestStyle);</span>
+        }
+<span class="nc" id="L130">        return node;</span>
+    }
+
+    /**
+     * Represent one JavaBean property.
+     *
+     * @param javaBean
+     *            - the instance to be represented
+     * @param property
+     *            - the property of the instance
+     * @param propertyValue
+     *            - value to be represented
+     * @param customTag
+     *            - user defined Tag
+     * @return NodeTuple to be used in a MappingNode. Return null to skip the
+     *         property
+     */
+    protected NodeTuple representJavaBeanProperty(Object javaBean, Property property,
+                                                  Object propertyValue, Tag customTag) {
+<span class="nc" id="L149">        ScalarNode nodeKey = (ScalarNode) representData(property.getName());</span>
+        // the first occurrence of the node must keep the tag
+<span class="nc" id="L151">        boolean hasAlias = this.representedObjects.containsKey(propertyValue);</span>
+
+<span class="nc" id="L153">        Node nodeValue = representData(propertyValue);</span>
+
+<span class="nc bnc" id="L155" title="All 4 branches missed.">        if (propertyValue != null &amp;&amp; !hasAlias) {</span>
+<span class="nc" id="L156">            NodeId nodeId = nodeValue.getNodeId();</span>
+<span class="nc bnc" id="L157" title="All 2 branches missed.">            if (customTag == null) {</span>
+<span class="nc bnc" id="L158" title="All 2 branches missed.">                if (nodeId == NodeId.scalar) {</span>
+                    //generic Enum requires the full tag
+<span class="nc bnc" id="L160" title="All 2 branches missed.">                    if (property.getType() != java.lang.Enum.class) {</span>
+<span class="nc bnc" id="L161" title="All 2 branches missed.">                        if (propertyValue instanceof Enum&lt;?&gt;) {</span>
+<span class="nc" id="L162">                            nodeValue.setTag(Tag.STR);</span>
+                        }
+                    }
+<span class="nc" id="L165">                } else {</span>
+<span class="nc bnc" id="L166" title="All 2 branches missed.">                    if (nodeId == NodeId.mapping) {</span>
+<span class="nc bnc" id="L167" title="All 2 branches missed.">                        if (property.getType() == propertyValue.getClass()) {</span>
+<span class="nc bnc" id="L168" title="All 2 branches missed.">                            if (!(propertyValue instanceof Map&lt;?, ?&gt;)) {</span>
+<span class="nc bnc" id="L169" title="All 2 branches missed.">                                if (!nodeValue.getTag().equals(Tag.SET)) {</span>
+<span class="nc" id="L170">                                    nodeValue.setTag(Tag.MAP);</span>
+                                }
+                            }
+                        }
+                    }
+<span class="nc" id="L175">                    checkGlobalTag(property, nodeValue, propertyValue);</span>
+                }
+            }
+        }
+
+<span class="nc" id="L180">        return new NodeTuple(nodeKey, nodeValue);</span>
+    }
+
+    /**
+     * Remove redundant global tag for a type safe (generic) collection if it is
+     * the same as defined by the JavaBean property
+     *
+     * @param property
+     *            - JavaBean property
+     * @param node
+     *            - representation of the property
+     * @param object
+     *            - instance represented by the node
+     */
+    @SuppressWarnings(&quot;unchecked&quot;)
+    protected void checkGlobalTag(Property property, Node node, Object object) {
+        // Skip primitive arrays.
+<span class="nc bnc" id="L197" title="All 4 branches missed.">        if (object.getClass().isArray() &amp;&amp; object.getClass().getComponentType().isPrimitive()) {</span>
+<span class="nc" id="L198">            return;</span>
+        }
+
+<span class="nc" id="L201">        Class&lt;?&gt;[] arguments = property.getActualTypeArguments();</span>
+<span class="nc bnc" id="L202" title="All 2 branches missed.">        if (arguments != null) {</span>
+<span class="nc bnc" id="L203" title="All 2 branches missed.">            if (node.getNodeId() == NodeId.sequence) {</span>
+                // apply map tag where class is the same
+<span class="nc" id="L205">                Class&lt;? extends Object&gt; t = arguments[0];</span>
+<span class="nc" id="L206">                SequenceNode snode = (SequenceNode) node;</span>
+<span class="nc" id="L207">                Iterable&lt;Object&gt; memberList = Collections.EMPTY_LIST;</span>
+<span class="nc bnc" id="L208" title="All 2 branches missed.">                if (object.getClass().isArray()) {</span>
+<span class="nc" id="L209">                    memberList = Arrays.asList((Object[]) object);</span>
+<span class="nc bnc" id="L210" title="All 2 branches missed.">                } else if (object instanceof Iterable&lt;?&gt;) {</span>
+                    // list
+<span class="nc" id="L212">                    memberList = (Iterable&lt;Object&gt;) object;</span>
+                }
+<span class="nc" id="L214">                Iterator&lt;Object&gt; iter = memberList.iterator();</span>
+<span class="nc bnc" id="L215" title="All 2 branches missed.">                if (iter.hasNext()) {</span>
+<span class="nc bnc" id="L216" title="All 2 branches missed.">                    for (Node childNode : snode.getValue()) {</span>
+<span class="nc" id="L217">                        Object member = iter.next();</span>
+<span class="nc bnc" id="L218" title="All 2 branches missed.">                        if (member != null) {</span>
+<span class="nc bnc" id="L219" title="All 2 branches missed.">                            if (t.equals(member.getClass()))</span>
+<span class="nc bnc" id="L220" title="All 2 branches missed.">                                if (childNode.getNodeId() == NodeId.mapping) {</span>
+<span class="nc" id="L221">                                    childNode.setTag(Tag.MAP);</span>
+                                }
+                        }
+                    }
+                }
+<span class="nc bnc" id="L226" title="All 2 branches missed.">            } else if (object instanceof Set) {</span>
+<span class="nc" id="L227">                Class&lt;?&gt; t = arguments[0];</span>
+<span class="nc" id="L228">                MappingNode mnode = (MappingNode) node;</span>
+<span class="nc" id="L229">                Iterator&lt;NodeTuple&gt; iter = mnode.getValue().iterator();</span>
+<span class="nc" id="L230">                Set&lt;?&gt; set = (Set&lt;?&gt;) object;</span>
+<span class="nc bnc" id="L231" title="All 2 branches missed.">                for (Object member : set) {</span>
+<span class="nc" id="L232">                    NodeTuple tuple = iter.next();</span>
+<span class="nc" id="L233">                    Node keyNode = tuple.getKeyNode();</span>
+<span class="nc bnc" id="L234" title="All 2 branches missed.">                    if (t.equals(member.getClass())) {</span>
+<span class="nc bnc" id="L235" title="All 2 branches missed.">                        if (keyNode.getNodeId() == NodeId.mapping) {</span>
+<span class="nc" id="L236">                            keyNode.setTag(Tag.MAP);</span>
+                        }
+                    }
+                }
+<span class="nc bnc" id="L240" title="All 2 branches missed.">            } else if (object instanceof Map) { // NodeId.mapping ends-up here</span>
+<span class="nc" id="L241">                Class&lt;?&gt; keyType = arguments[0];</span>
+<span class="nc" id="L242">                Class&lt;?&gt; valueType = arguments[1];</span>
+<span class="nc" id="L243">                MappingNode mnode = (MappingNode) node;</span>
+<span class="nc bnc" id="L244" title="All 2 branches missed.">                for (NodeTuple tuple : mnode.getValue()) {</span>
+<span class="nc" id="L245">                    resetTag(keyType, tuple.getKeyNode());</span>
+<span class="nc" id="L246">                    resetTag(valueType, tuple.getValueNode());</span>
+                }
+            } else {
+                // the type for collection entries cannot be
+                // detected
+            }
+        }
+<span class="nc" id="L253">    }</span>
+
+    private void resetTag(Class&lt;? extends Object&gt; type, Node node) {
+<span class="nc" id="L256">        Tag tag = node.getTag();</span>
+<span class="nc bnc" id="L257" title="All 2 branches missed.">        if (tag.matches(type)) {</span>
+<span class="nc bnc" id="L258" title="All 2 branches missed.">            if (Enum.class.isAssignableFrom(type)) {</span>
+<span class="nc" id="L259">                node.setTag(Tag.STR);</span>
+<span class="nc" id="L260">            } else {</span>
+<span class="nc" id="L261">                node.setTag(Tag.MAP);</span>
+            }
+        }
+<span class="nc" id="L264">    }</span>
+
+    /**
+     * Get JavaBean properties to be serialised. The order is respected. This
+     * method may be overridden to provide custom property selection or order.
+     *
+     * @param type
+     *            - JavaBean to inspect the properties
+     * @return properties to serialise
+     */
+    protected Set&lt;Property&gt; getProperties(Class&lt;? extends Object&gt; type) {
+<span class="nc bnc" id="L275" title="All 2 branches missed.">        if (typeDefinitions.containsKey(type)) {</span>
+<span class="nc" id="L276">            return typeDefinitions.get(type).getProperties();</span>
+        }
+<span class="nc" id="L278">        return getPropertyUtils().getProperties(type);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

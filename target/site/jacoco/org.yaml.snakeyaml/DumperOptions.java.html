@@ -1,0 +1,493 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>DumperOptions.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml</a> &gt; <span class="el_source">DumperOptions.java</span></div><h1>DumperOptions.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml;
+
+import java.util.Map;
+import java.util.TimeZone;
+
+import org.yaml.snakeyaml.emitter.Emitter;
+import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.serializer.AnchorGenerator;
+import org.yaml.snakeyaml.serializer.NumberAnchorGenerator;
+
+<span class="fc" id="L26">public class DumperOptions {</span>
+    /**
+     * YAML provides a rich set of scalar styles. Block scalar styles include
+     * the literal style and the folded style; flow scalar styles include the
+     * plain style and two quoted styles, the single-quoted style and the
+     * double-quoted style. These styles offer a range of trade-offs between
+     * expressive power and readability.
+     *
+     * @see &lt;a href=&quot;http://yaml.org/spec/1.1/#id903915&quot;&gt;Chapter 9. Scalar
+     *      Styles&lt;/a&gt;
+     * @see &lt;a href=&quot;http://yaml.org/spec/1.1/#id858081&quot;&gt;2.3. Scalars&lt;/a&gt;
+     */
+<span class="fc" id="L38">    public enum ScalarStyle {</span>
+<span class="fc" id="L39">        DOUBLE_QUOTED('&quot;'), SINGLE_QUOTED('\''), LITERAL(</span>
+<span class="fc" id="L40">                '|'), FOLDED('&gt;'), PLAIN(null);</span>
+        private Character styleChar;
+
+<span class="fc" id="L43">        private ScalarStyle(Character style) {</span>
+<span class="fc" id="L44">            this.styleChar = style;</span>
+<span class="fc" id="L45">        }</span>
+
+        public Character getChar() {
+<span class="nc" id="L48">            return styleChar;</span>
+        }
+
+        @Override
+        public String toString() {
+<span class="nc" id="L53">            return &quot;Scalar style: '&quot; + styleChar + &quot;'&quot;;</span>
+        }
+
+        public static ScalarStyle createStyle(Character style) {
+<span class="pc bpc" id="L57" title="1 of 2 branches missed.">            if (style == null) {</span>
+<span class="nc" id="L58">                return PLAIN;</span>
+            } else {
+<span class="pc bpc" id="L60" title="1 of 5 branches missed.">                switch (style) {</span>
+                case '&quot;':
+<span class="fc" id="L62">                    return DOUBLE_QUOTED;</span>
+                case '\'':
+<span class="fc" id="L64">                    return SINGLE_QUOTED;</span>
+                case '|':
+<span class="fc" id="L66">                    return LITERAL;</span>
+                case '&gt;':
+<span class="fc" id="L68">                    return FOLDED;</span>
+                default:
+<span class="nc" id="L70">                    throw new YAMLException(&quot;Unknown scalar style character: &quot; + style);</span>
+                }
+            }
+        }
+    }
+
+    /**
+     * Block styles use indentation to denote nesting and scope within the
+     * document. In contrast, flow styles rely on explicit indicators to denote
+     * nesting and scope.
+     *
+     * @see &lt;a href=&quot;http://www.yaml.org/spec/current.html#id2509255&quot;&gt;3.2.3.1.
+     *      Node Styles (http://yaml.org/spec/1.1)&lt;/a&gt;
+     */
+<span class="fc" id="L84">    public enum FlowStyle {</span>
+<span class="fc" id="L85">        FLOW(Boolean.TRUE), BLOCK(Boolean.FALSE), AUTO(null);</span>
+
+        private Boolean styleBoolean;
+
+<span class="fc" id="L89">        private FlowStyle(Boolean flowStyle) {</span>
+<span class="fc" id="L90">            styleBoolean = flowStyle;</span>
+<span class="fc" id="L91">        }</span>
+        
+        /*
+         * Convenience for legacy constructors that took {@link Boolean} arguments since replaced by {@link FlowStyle}.
+         * Introduced in v1.22 but only to support that for backwards compatibility.
+         * @deprecated Since restored in v1.22.  Use the {@link FlowStyle} constants in your code instead.
+         */
+        @Deprecated
+        public static FlowStyle fromBoolean(Boolean flowStyle) {
+<span class="nc bnc" id="L100" title="All 2 branches missed.">            return flowStyle==null ? AUTO</span>
+<span class="nc bnc" id="L101" title="All 2 branches missed.">                : flowStyle ? FLOW</span>
+<span class="nc" id="L102">                    : BLOCK;</span>
+        }
+
+        public Boolean getStyleBoolean() {
+<span class="nc" id="L106">            return styleBoolean;</span>
+        }
+
+        @Override
+        public String toString() {
+<span class="nc" id="L111">            return &quot;Flow style: '&quot; + styleBoolean + &quot;'&quot;;</span>
+        }
+    }
+
+    /**
+     * Platform dependent line break.
+     */
+<span class="fc" id="L118">    public enum LineBreak {</span>
+<span class="fc" id="L119">        WIN(&quot;\r\n&quot;), MAC(&quot;\r&quot;), UNIX(&quot;\n&quot;);</span>
+
+        private String lineBreak;
+
+<span class="fc" id="L123">        private LineBreak(String lineBreak) {</span>
+<span class="fc" id="L124">            this.lineBreak = lineBreak;</span>
+<span class="fc" id="L125">        }</span>
+
+        public String getString() {
+<span class="nc" id="L128">            return lineBreak;</span>
+        }
+
+        @Override
+        public String toString() {
+<span class="nc" id="L133">            return &quot;Line break: &quot; + name();</span>
+        }
+
+        public static LineBreak getPlatformLineBreak() {
+<span class="nc" id="L137">            String platformLineBreak = System.getProperty(&quot;line.separator&quot;);</span>
+<span class="nc bnc" id="L138" title="All 2 branches missed.">            for (LineBreak lb : values()) {</span>
+<span class="nc bnc" id="L139" title="All 2 branches missed.">                if (lb.lineBreak.equals(platformLineBreak)) {</span>
+<span class="nc" id="L140">                    return lb;</span>
+                }
+            }
+<span class="nc" id="L143">            return LineBreak.UNIX;</span>
+        }
+    }
+
+    /**
+     * Specification version. Currently supported 1.0 and 1.1
+     */
+<span class="nc" id="L150">    public enum Version {</span>
+<span class="nc" id="L151">        V1_0(new Integer[] { 1, 0 }), V1_1(new Integer[] { 1, 1 });</span>
+
+        private Integer[] version;
+
+<span class="nc" id="L155">        private Version(Integer[] version) {</span>
+<span class="nc" id="L156">            this.version = version;</span>
+<span class="nc" id="L157">        }</span>
+
+<span class="nc" id="L159">        public int major() { return version[0]; }</span>
+<span class="nc" id="L160">        public int minor() { return version[1]; }</span>
+
+        public String getRepresentation() {
+<span class="nc" id="L163">            return version[0] + &quot;.&quot; + version[1];</span>
+        }
+
+        @Override
+        public String toString() {
+<span class="nc" id="L168">            return &quot;Version: &quot; + getRepresentation();</span>
+        }
+    }
+
+<span class="fc" id="L172">    public enum NonPrintableStyle {</span>
+<span class="fc" id="L173">        /**</span>
+         * Transform String to binary if it contains non-printable characters
+         */
+<span class="fc" id="L176">        BINARY,</span>
+<span class="fc" id="L177">        /**</span>
+         * Escape non-printable characters
+         */
+<span class="fc" id="L180">        ESCAPE</span>
+    }
+
+<span class="fc" id="L183">    private ScalarStyle defaultStyle = ScalarStyle.PLAIN;</span>
+<span class="fc" id="L184">    private FlowStyle defaultFlowStyle = FlowStyle.AUTO;</span>
+<span class="fc" id="L185">    private boolean canonical = false;</span>
+<span class="fc" id="L186">    private boolean allowUnicode = true;</span>
+<span class="fc" id="L187">    private boolean allowReadOnlyProperties = false;</span>
+<span class="fc" id="L188">    private int indent = 2;</span>
+<span class="fc" id="L189">    private int indicatorIndent = 0;</span>
+<span class="fc" id="L190">    private boolean indentWithIndicator = false;</span>
+<span class="fc" id="L191">    private int bestWidth = 80;</span>
+<span class="fc" id="L192">    private boolean splitLines = true;</span>
+<span class="fc" id="L193">    private LineBreak lineBreak = LineBreak.UNIX;</span>
+<span class="fc" id="L194">    private boolean explicitStart = false;</span>
+<span class="fc" id="L195">    private boolean explicitEnd = false;</span>
+<span class="fc" id="L196">    private TimeZone timeZone = null;</span>
+<span class="fc" id="L197">    private int maxSimpleKeyLength = 128;</span>
+<span class="fc" id="L198">    private boolean processComments = false;</span>
+<span class="fc" id="L199">    private NonPrintableStyle  nonPrintableStyle = NonPrintableStyle.BINARY;</span>
+
+<span class="fc" id="L201">    private Version version = null;</span>
+<span class="fc" id="L202">    private Map&lt;String, String&gt; tags = null;</span>
+<span class="fc" id="L203">    private Boolean prettyFlow = false;</span>
+<span class="fc" id="L204">    private AnchorGenerator anchorGenerator = new NumberAnchorGenerator(0);</span>
+
+    public boolean isAllowUnicode() {
+<span class="nc" id="L207">        return allowUnicode;</span>
+    }
+
+    /**
+     * Specify whether to emit non-ASCII printable Unicode characters.
+     * The default value is true.
+     * When set to false then printable non-ASCII characters (Cyrillic, Chinese etc)
+     * will be not printed but escaped (to support ASCII terminals)
+     *
+     * @param allowUnicode
+     *            if allowUnicode is false then all non-ASCII characters are
+     *            escaped
+     */
+    public void setAllowUnicode(boolean allowUnicode) {
+<span class="nc" id="L221">        this.allowUnicode = allowUnicode;</span>
+<span class="nc" id="L222">    }</span>
+
+    public ScalarStyle getDefaultScalarStyle() {
+<span class="fc" id="L225">        return defaultStyle;</span>
+    }
+
+    /**
+     * Set default style for scalars. See YAML 1.1 specification, 2.3 Scalars
+     * (http://yaml.org/spec/1.1/#id858081)
+     *
+     * @param defaultStyle
+     *            set the style for all scalars
+     */
+    public void setDefaultScalarStyle(ScalarStyle defaultStyle) {
+<span class="nc bnc" id="L236" title="All 2 branches missed.">        if (defaultStyle == null) {</span>
+<span class="nc" id="L237">            throw new NullPointerException(&quot;Use ScalarStyle enum.&quot;);</span>
+        }
+<span class="nc" id="L239">        this.defaultStyle = defaultStyle;</span>
+<span class="nc" id="L240">    }</span>
+
+    public void setIndent(int indent) {
+<span class="nc bnc" id="L243" title="All 2 branches missed.">        if (indent &lt; Emitter.MIN_INDENT) {</span>
+<span class="nc" id="L244">            throw new YAMLException(&quot;Indent must be at least &quot; + Emitter.MIN_INDENT);</span>
+        }
+<span class="nc bnc" id="L246" title="All 2 branches missed.">        if (indent &gt; Emitter.MAX_INDENT) {</span>
+<span class="nc" id="L247">            throw new YAMLException(&quot;Indent must be at most &quot; + Emitter.MAX_INDENT);</span>
+        }
+<span class="nc" id="L249">        this.indent = indent;</span>
+<span class="nc" id="L250">    }</span>
+
+    public int getIndent() {
+<span class="fc" id="L253">        return this.indent;</span>
+    }
+
+    /**
+     * Set number of white spaces to use for the sequence indicator '-'
+     * @param indicatorIndent value to be used as indent
+     */
+    public void setIndicatorIndent(int indicatorIndent) {
+<span class="nc bnc" id="L261" title="All 2 branches missed.">        if (indicatorIndent &lt; 0) {</span>
+<span class="nc" id="L262">            throw new YAMLException(&quot;Indicator indent must be non-negative.&quot;);</span>
+        }
+<span class="nc bnc" id="L264" title="All 2 branches missed.">        if (indicatorIndent &gt; Emitter.MAX_INDENT - 1) {</span>
+<span class="nc" id="L265">            throw new YAMLException(&quot;Indicator indent must be at most Emitter.MAX_INDENT-1: &quot; + (Emitter.MAX_INDENT - 1));</span>
+        }
+<span class="nc" id="L267">        this.indicatorIndent = indicatorIndent;</span>
+<span class="nc" id="L268">    }</span>
+
+    public int getIndicatorIndent() {
+<span class="fc" id="L271">        return this.indicatorIndent;</span>
+    }
+
+    public boolean getIndentWithIndicator() {
+<span class="fc" id="L275">        return indentWithIndicator;</span>
+    }
+
+    /**
+     * Set to true to add the indent for sequences to the general indent
+     * @param indentWithIndicator - true when indent for sequences is added to general
+     */
+    public void setIndentWithIndicator(boolean indentWithIndicator) {
+<span class="nc" id="L283">        this.indentWithIndicator = indentWithIndicator;</span>
+<span class="nc" id="L284">    }</span>
+
+    public void setVersion(Version version) {
+<span class="nc" id="L287">        this.version = version;</span>
+<span class="nc" id="L288">    }</span>
+
+    public Version getVersion() {
+<span class="nc" id="L291">        return this.version;</span>
+    }
+
+    /**
+     * Force the emitter to produce a canonical YAML document.
+     *
+     * @param canonical
+     *            true produce canonical YAML document
+     */
+    public void setCanonical(boolean canonical) {
+<span class="nc" id="L301">        this.canonical = canonical;</span>
+<span class="nc" id="L302">    }</span>
+
+    public boolean isCanonical() {
+<span class="nc" id="L305">        return this.canonical;</span>
+    }
+
+    /**
+     * Force the emitter to produce a pretty YAML document when using the flow
+     * style.
+     *
+     * @param prettyFlow
+     *            true produce pretty flow YAML document
+     */
+    public void setPrettyFlow(boolean prettyFlow) {
+<span class="nc" id="L316">        this.prettyFlow = prettyFlow;</span>
+<span class="nc" id="L317">    }</span>
+
+    public boolean isPrettyFlow() {
+<span class="nc" id="L320">        return this.prettyFlow;</span>
+    }
+
+    /**
+     * Specify the preferred width to emit scalars. When the scalar
+     * representation takes more then the preferred with the scalar will be
+     * split into a few lines. The default is 80.
+     *
+     * @param bestWidth
+     *            the preferred width for scalars.
+     */
+    public void setWidth(int bestWidth) {
+<span class="nc" id="L332">        this.bestWidth = bestWidth;</span>
+<span class="nc" id="L333">    }</span>
+
+    public int getWidth() {
+<span class="nc" id="L336">        return this.bestWidth;</span>
+    }
+
+    /**
+     * Specify whether to split lines exceeding preferred width for
+     * scalars. The default is true.
+     *
+     * @param splitLines
+     *            whether to split lines exceeding preferred width for scalars.
+     */
+    public void setSplitLines(boolean splitLines) {
+<span class="nc" id="L347">        this.splitLines = splitLines;</span>
+<span class="nc" id="L348">    }</span>
+
+    public boolean getSplitLines() {
+<span class="nc" id="L351">        return this.splitLines;</span>
+    }
+
+    public LineBreak getLineBreak() {
+<span class="nc" id="L355">        return lineBreak;</span>
+    }
+
+    public void setDefaultFlowStyle(FlowStyle defaultFlowStyle) {
+<span class="nc bnc" id="L359" title="All 2 branches missed.">        if (defaultFlowStyle == null) {</span>
+<span class="nc" id="L360">            throw new NullPointerException(&quot;Use FlowStyle enum.&quot;);</span>
+        }
+<span class="nc" id="L362">        this.defaultFlowStyle = defaultFlowStyle;</span>
+<span class="nc" id="L363">    }</span>
+
+    public FlowStyle getDefaultFlowStyle() {
+<span class="fc" id="L366">        return defaultFlowStyle;</span>
+    }
+
+    /**
+     * Specify the line break to separate the lines. It is platform specific:
+     * Windows - &quot;\r\n&quot;, old MacOS - &quot;\r&quot;, Unix - &quot;\n&quot;. The default value is the
+     * one for Unix.
+     * @param lineBreak to be used for the input
+     */
+    public void setLineBreak(LineBreak lineBreak) {
+<span class="nc bnc" id="L376" title="All 2 branches missed.">        if (lineBreak == null) {</span>
+<span class="nc" id="L377">            throw new NullPointerException(&quot;Specify line break.&quot;);</span>
+        }
+<span class="nc" id="L379">        this.lineBreak = lineBreak;</span>
+<span class="nc" id="L380">    }</span>
+
+    public boolean isExplicitStart() {
+<span class="nc" id="L383">        return explicitStart;</span>
+    }
+
+    public void setExplicitStart(boolean explicitStart) {
+<span class="nc" id="L387">        this.explicitStart = explicitStart;</span>
+<span class="nc" id="L388">    }</span>
+
+    public boolean isExplicitEnd() {
+<span class="nc" id="L391">        return explicitEnd;</span>
+    }
+
+    public void setExplicitEnd(boolean explicitEnd) {
+<span class="nc" id="L395">        this.explicitEnd = explicitEnd;</span>
+<span class="nc" id="L396">    }</span>
+
+    public Map&lt;String, String&gt; getTags() {
+<span class="nc" id="L399">        return tags;</span>
+    }
+
+    public void setTags(Map&lt;String, String&gt; tags) {
+<span class="nc" id="L403">        this.tags = tags;</span>
+<span class="nc" id="L404">    }</span>
+
+    /**
+     * Report whether read-only JavaBean properties (the ones without setters)
+     * should be included in the YAML document
+     *
+     * @return false when read-only JavaBean properties are not emitted
+     */
+    public boolean isAllowReadOnlyProperties() {
+<span class="fc" id="L413">        return allowReadOnlyProperties;</span>
+    }
+
+    /**
+     * Set to true to include read-only JavaBean properties (the ones without
+     * setters) in the YAML document. By default these properties are not
+     * included to be able to parse later the same JavaBean.
+     *
+     * @param allowReadOnlyProperties
+     *            - true to dump read-only JavaBean properties
+     */
+    public void setAllowReadOnlyProperties(boolean allowReadOnlyProperties) {
+<span class="nc" id="L425">        this.allowReadOnlyProperties = allowReadOnlyProperties;</span>
+<span class="nc" id="L426">    }</span>
+
+    public TimeZone getTimeZone() {
+<span class="fc" id="L429">        return timeZone;</span>
+    }
+
+    /**
+     * Set the timezone to be used for Date. If set to &lt;code&gt;null&lt;/code&gt; UTC is
+     * used.
+     * @param timeZone for created Dates or null to use UTC
+     */
+    public void setTimeZone(TimeZone timeZone) {
+<span class="nc" id="L438">        this.timeZone = timeZone;</span>
+<span class="nc" id="L439">    }</span>
+
+
+    public AnchorGenerator getAnchorGenerator() {
+<span class="nc" id="L443">        return anchorGenerator;</span>
+    }
+
+    public void setAnchorGenerator(AnchorGenerator anchorGenerator) {
+<span class="nc" id="L447">        this.anchorGenerator = anchorGenerator;</span>
+<span class="nc" id="L448">    }</span>
+
+    public int getMaxSimpleKeyLength() {
+<span class="nc" id="L451">        return maxSimpleKeyLength;</span>
+    }
+
+    /**
+     * Define max key length to use simple key (without '?')
+     * More info https://yaml.org/spec/1.1/#id934537
+     * @param maxSimpleKeyLength - the limit after which the key gets explicit key indicator '?'
+     */
+    public void setMaxSimpleKeyLength(int maxSimpleKeyLength) {
+<span class="nc bnc" id="L460" title="All 2 branches missed.">        if(maxSimpleKeyLength &gt; 1024) {</span>
+<span class="nc" id="L461">            throw new YAMLException(&quot;The simple key must not span more than 1024 stream characters. See https://yaml.org/spec/1.1/#id934537&quot;);</span>
+        }
+<span class="nc" id="L463">        this.maxSimpleKeyLength = maxSimpleKeyLength;</span>
+<span class="nc" id="L464">    }</span>
+
+    /**
+     * Set the comment processing. By default comments are ignored.
+     *
+     * @param processComments &lt;code&gt;true&lt;/code&gt; to process; &lt;code&gt;false&lt;/code&gt; to ignore&lt;/code&gt;
+     */
+
+    public void setProcessComments(boolean processComments) {
+<span class="nc" id="L473">        this.processComments = processComments;</span>
+<span class="nc" id="L474">    }</span>
+
+    public boolean isProcessComments() {
+<span class="nc" id="L477">        return processComments;</span>
+    }
+
+    public NonPrintableStyle getNonPrintableStyle() {
+<span class="fc" id="L481">        return this.nonPrintableStyle;</span>
+    }
+
+    /**
+     * When String contains non-printable characters SnakeYAML convert it to binary data with the !!binary tag.
+     * Set this to ESCAPE to keep the !!str tag and escape the non-printable chars with \\x or \\u
+     * @param style ESCAPE to force SnakeYAML to keep !!str tag for non-printable data
+     */
+    public void setNonPrintableStyle(NonPrintableStyle style) {
+<span class="nc" id="L490">        this.nonPrintableStyle = style;</span>
+<span class="nc" id="L491">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

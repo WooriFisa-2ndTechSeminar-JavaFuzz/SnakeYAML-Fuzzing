@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ArrayUtils.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.util</a> &gt; <span class="el_source">ArrayUtils.java</span></div><h1>ArrayUtils.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.util;
+
+import java.util.AbstractList;
+import java.util.Collections;
+import java.util.List;
+
+public class ArrayUtils {
+
+    private ArrayUtils() {
+    }
+
+    /**
+     * Returns an unmodifiable {@code List} backed by the given array. The method doesn't copy the array, so the changes
+     * to the array will affect the {@code List} as well.
+     * @param &lt;E&gt; class of the elements in the array
+     * @param elements - array to convert
+     * @return {@code List} backed by the given array
+     */
+    public static &lt;E&gt; List&lt;E&gt; toUnmodifiableList(E[] elements) {
+<span class="nc bnc" id="L35" title="All 2 branches missed.">        return elements.length == 0 ? Collections.&lt;E&gt; emptyList()</span>
+<span class="nc" id="L36">                : new UnmodifiableArrayList&lt;E&gt;(elements);</span>
+    }
+
+    /**
+     * Returns an unmodifiable {@code List} containing the second array appended to the first one. The method doesn't copy
+     * the arrays, so the changes to the arrays will affect the {@code List} as well.
+     * @param &lt;E&gt; class of the elements in the array
+     * @param array1 - the array to extend
+     * @param array2 - the array to add to the first
+     * @return {@code List} backed by the given arrays
+     */
+    public static &lt;E&gt; List&lt;E&gt; toUnmodifiableCompositeList(E[] array1, E[] array2) {
+        List&lt;E&gt; result;
+<span class="nc bnc" id="L49" title="All 2 branches missed.">        if (array1.length == 0) {</span>
+<span class="nc" id="L50">            result = toUnmodifiableList(array2);</span>
+<span class="nc bnc" id="L51" title="All 2 branches missed.">        } else if (array2.length == 0) {</span>
+<span class="nc" id="L52">            result = toUnmodifiableList(array1);</span>
+<span class="nc" id="L53">        } else {</span>
+<span class="nc" id="L54">            result = new CompositeUnmodifiableArrayList&lt;E&gt;(array1, array2);</span>
+        }
+<span class="nc" id="L56">        return result;</span>
+    }
+
+    private static class UnmodifiableArrayList&lt;E&gt; extends AbstractList&lt;E&gt; {
+
+        private final E[] array;
+
+<span class="nc" id="L63">        UnmodifiableArrayList(E[] array) {</span>
+<span class="nc" id="L64">            this.array = array;</span>
+<span class="nc" id="L65">        }</span>
+
+        @Override
+        public E get(int index) {
+<span class="nc bnc" id="L69" title="All 2 branches missed.">            if (index &gt;= array.length) {</span>
+<span class="nc" id="L70">                throw new IndexOutOfBoundsException(&quot;Index: &quot; + index + &quot;, Size: &quot; + size());</span>
+            }
+<span class="nc" id="L72">            return array[index];</span>
+        }
+
+        @Override
+        public int size() {
+<span class="nc" id="L77">            return array.length;</span>
+        }
+    }
+
+    private static class CompositeUnmodifiableArrayList&lt;E&gt; extends AbstractList&lt;E&gt; {
+
+        private final E[] array1;
+        private final E[] array2;
+
+<span class="nc" id="L86">        CompositeUnmodifiableArrayList(E[] array1, E[] array2) {</span>
+<span class="nc" id="L87">            this.array1 = array1;</span>
+<span class="nc" id="L88">            this.array2 = array2;</span>
+<span class="nc" id="L89">        }</span>
+
+        @Override
+        public E get(int index) {
+            E element;
+<span class="nc bnc" id="L94" title="All 2 branches missed.">            if (index &lt; array1.length) {</span>
+<span class="nc" id="L95">                element = array1[index];</span>
+<span class="nc bnc" id="L96" title="All 2 branches missed.">            } else if (index - array1.length &lt; array2.length) {</span>
+<span class="nc" id="L97">                element = array2[index - array1.length];</span>
+<span class="nc" id="L98">            } else {</span>
+<span class="nc" id="L99">                throw new IndexOutOfBoundsException(&quot;Index: &quot; + index + &quot;, Size: &quot; + size());</span>
+            }
+<span class="nc" id="L101">            return element;</span>
+        }
+
+        @Override
+        public int size() {
+<span class="nc" id="L106">            return array1.length + array2.length;</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

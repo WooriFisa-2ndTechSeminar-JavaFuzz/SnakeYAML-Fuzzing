@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Constant.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.scanner</a> &gt; <span class="el_source">Constant.java</span></div><h1>Constant.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.scanner;
+
+import java.util.Arrays;
+
+public final class Constant {
+    private final static String ALPHA_S = &quot;abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-_&quot;;
+
+    private final static String LINEBR_S = &quot;\n\u0085\u2028\u2029&quot;;
+    private final static String FULL_LINEBR_S = &quot;\r&quot; + LINEBR_S;
+    private final static String NULL_OR_LINEBR_S = &quot;\0&quot; + FULL_LINEBR_S;
+    private final static String NULL_BL_LINEBR_S = &quot; &quot; + NULL_OR_LINEBR_S;
+    private final static String NULL_BL_T_LINEBR_S = &quot;\t&quot; + NULL_BL_LINEBR_S;
+    private final static String NULL_BL_T_S = &quot;\0 \t&quot;;
+    private final static String URI_CHARS_S = ALPHA_S + &quot;-;/?:@&amp;=+$,_.!~*\'()[]%&quot;;
+
+<span class="fc" id="L31">    public final static Constant LINEBR = new Constant(LINEBR_S);</span>
+<span class="fc" id="L32">    public final static Constant NULL_OR_LINEBR = new Constant(NULL_OR_LINEBR_S);</span>
+<span class="fc" id="L33">    public final static Constant NULL_BL_LINEBR = new Constant(NULL_BL_LINEBR_S);</span>
+<span class="fc" id="L34">    public final static Constant NULL_BL_T_LINEBR = new Constant(NULL_BL_T_LINEBR_S);</span>
+<span class="fc" id="L35">    public final static Constant NULL_BL_T = new Constant(NULL_BL_T_S);</span>
+<span class="fc" id="L36">    public final static Constant URI_CHARS = new Constant(URI_CHARS_S);</span>
+
+<span class="fc" id="L38">    public final static Constant ALPHA = new Constant(ALPHA_S);</span>
+
+    private String content;
+<span class="fc" id="L41">    boolean[] contains = new boolean[128];</span>
+<span class="fc" id="L42">    boolean noASCII = false;</span>
+
+<span class="fc" id="L44">    private Constant(String content) {</span>
+<span class="fc" id="L45">        Arrays.fill(contains, false);</span>
+<span class="fc" id="L46">        StringBuilder sb = new StringBuilder();</span>
+<span class="fc bfc" id="L47" title="All 2 branches covered.">        for (int i = 0; i &lt; content.length(); i++) {</span>
+<span class="fc" id="L48">            int c = content.codePointAt(i);</span>
+<span class="fc bfc" id="L49" title="All 2 branches covered.">            if (c &lt; 128)</span>
+<span class="fc" id="L50">                contains[c] = true;</span>
+            else
+<span class="fc" id="L52">                sb.appendCodePoint(c);</span>
+        }
+<span class="fc bfc" id="L54" title="All 2 branches covered.">        if (sb.length() &gt; 0) {</span>
+<span class="fc" id="L55">            noASCII = true;</span>
+<span class="fc" id="L56">            this.content = sb.toString();</span>
+        }
+<span class="fc" id="L58">    }</span>
+
+    public boolean has(int c) {
+<span class="fc bfc" id="L61" title="All 6 branches covered.">        return (c &lt; 128) ? contains[c] : noASCII &amp;&amp; content.indexOf(c, 0) != -1;</span>
+    }
+
+    public boolean hasNo(int c) {
+<span class="fc bfc" id="L65" title="All 2 branches covered.">        return !has(c);</span>
+    }
+
+    public boolean has(int c, String additional) {
+<span class="fc bfc" id="L69" title="All 4 branches covered.">        return has(c) || additional.indexOf(c, 0) != -1;</span>
+    }
+
+    public boolean hasNo(int c, String additional) {
+<span class="fc bfc" id="L73" title="All 2 branches covered.">        return !has(c, additional);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

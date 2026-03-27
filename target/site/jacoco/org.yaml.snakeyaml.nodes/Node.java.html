@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Node.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.nodes</a> &gt; <span class="el_source">Node.java</span></div><h1>Node.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.nodes;
+
+import java.util.List;
+
+import org.yaml.snakeyaml.comments.CommentLine;
+import org.yaml.snakeyaml.error.Mark;
+
+/**
+ * Base class for all nodes.
+ * &lt;p&gt;
+ * The nodes form the node-graph described in the &lt;a
+ * href=&quot;http://yaml.org/spec/1.1/&quot;&gt;YAML Specification&lt;/a&gt;.
+ * &lt;/p&gt;
+ * &lt;p&gt;
+ * While loading, the node graph is usually created by the
+ * {@link org.yaml.snakeyaml.composer.Composer}, and later transformed into
+ * application specific Java classes by the classes from the
+ * {@link org.yaml.snakeyaml.constructor} package.
+ * &lt;/p&gt;
+ */
+public abstract class Node {
+    private Tag tag;
+    private Mark startMark;
+    protected Mark endMark;
+    private Class&lt;? extends Object&gt; type;
+    private boolean twoStepsConstruction;
+    private String anchor;
+    private List&lt;CommentLine&gt; inLineComments;
+    private List&lt;CommentLine&gt; blockComments;
+    // End Comments are only on the last node in a document
+    private List&lt;CommentLine&gt; endComments;
+
+    /**
+     * true when the tag is assigned by the resolver
+     */
+    protected boolean resolved;
+    protected Boolean useClassConstructor;
+
+<span class="fc" id="L54">    public Node(Tag tag, Mark startMark, Mark endMark) {</span>
+<span class="fc" id="L55">        setTag(tag);</span>
+<span class="fc" id="L56">        this.startMark = startMark;</span>
+<span class="fc" id="L57">        this.endMark = endMark;</span>
+<span class="fc" id="L58">        this.type = Object.class;</span>
+<span class="fc" id="L59">        this.twoStepsConstruction = false;</span>
+<span class="fc" id="L60">        this.resolved = true;</span>
+<span class="fc" id="L61">        this.useClassConstructor = null;</span>
+<span class="fc" id="L62">        this.inLineComments = null;</span>
+<span class="fc" id="L63">        this.blockComments = null;</span>
+<span class="fc" id="L64">        this.endComments = null;</span>
+<span class="fc" id="L65">    }</span>
+
+    /**
+     * Tag of this node.
+     * &lt;p&gt;
+     * Every node has a tag assigned. The tag is either local or global.
+     * 
+     * @return Tag of this node.
+     */
+    public Tag getTag() {
+<span class="fc" id="L75">        return this.tag;</span>
+    }
+
+    public Mark getEndMark() {
+<span class="nc" id="L79">        return endMark;</span>
+    }
+
+    /**
+     * For error reporting.
+     * 
+     * @see &quot;class variable 'id' in PyYAML&quot;
+     * @return scalar, sequence, mapping
+     */
+    public abstract NodeId getNodeId();
+
+    public Mark getStartMark() {
+<span class="fc" id="L91">        return startMark;</span>
+    }
+
+    public void setTag(Tag tag) {
+<span class="pc bpc" id="L95" title="1 of 2 branches missed.">        if (tag == null) {</span>
+<span class="nc" id="L96">            throw new NullPointerException(&quot;tag in a Node is required.&quot;);</span>
+        }
+<span class="fc" id="L98">        this.tag = tag;</span>
+<span class="fc" id="L99">    }</span>
+
+    /**
+     * Node is only equal to itself
+     */
+    @Override
+    public final boolean equals(Object obj) {
+<span class="nc" id="L106">        return super.equals(obj);</span>
+    }
+
+    public Class&lt;? extends Object&gt; getType() {
+<span class="fc" id="L110">        return type;</span>
+    }
+
+    public void setType(Class&lt;? extends Object&gt; type) {
+<span class="fc bfc" id="L114" title="All 2 branches covered.">        if (!type.isAssignableFrom(this.type)) {</span>
+<span class="fc" id="L115">            this.type = type;</span>
+        }
+<span class="fc" id="L117">    }</span>
+
+    public void setTwoStepsConstruction(boolean twoStepsConstruction) {
+<span class="fc" id="L120">        this.twoStepsConstruction = twoStepsConstruction;</span>
+<span class="fc" id="L121">    }</span>
+
+    /**
+     * Indicates if this node must be constructed in two steps.
+     * &lt;p&gt;
+     * Two-step construction is required whenever a node is a child (direct or
+     * indirect) of it self. That is, if a recursive structure is build using
+     * anchors and aliases.
+     * &lt;/p&gt;
+     * &lt;p&gt;
+     * Set by {@link org.yaml.snakeyaml.composer.Composer}, used during the
+     * construction process.
+     * &lt;/p&gt;
+     * &lt;p&gt;
+     * Only relevant during loading.
+     * &lt;/p&gt;
+     * 
+     * @return &lt;code&gt;true&lt;/code&gt; if the node is self referenced.
+     */
+    public boolean isTwoStepsConstruction() {
+<span class="fc" id="L141">        return twoStepsConstruction;</span>
+    }
+
+    @Override
+    public final int hashCode() {
+<span class="fc" id="L146">        return super.hashCode();</span>
+    }
+
+    public boolean useClassConstructor() {
+<span class="pc bpc" id="L150" title="1 of 2 branches missed.">        if (useClassConstructor == null) {</span>
+<span class="fc bfc" id="L151" title="All 6 branches covered.">            if (!tag.isSecondary() &amp;&amp; resolved &amp;&amp; !Object.class.equals(type)</span>
+<span class="fc bfc" id="L152" title="All 2 branches covered.">                    &amp;&amp; !tag.equals(Tag.NULL)) {</span>
+<span class="fc" id="L153">                return true;</span>
+<span class="pc bpc" id="L154" title="1 of 2 branches missed.">            } else if (tag.isCompatible(getType())) {</span>
+                // the tag is compatible with the runtime class
+                // the tag will be ignored
+<span class="nc" id="L157">                return true;</span>
+            } else {
+<span class="fc" id="L159">                return false;</span>
+            }
+        }
+<span class="nc" id="L162">        return useClassConstructor.booleanValue();</span>
+    }
+
+    public void setUseClassConstructor(Boolean useClassConstructor) {
+<span class="nc" id="L166">        this.useClassConstructor = useClassConstructor;</span>
+<span class="nc" id="L167">    }</span>
+
+    /**
+     * Indicates if the tag was added by
+     * {@link org.yaml.snakeyaml.resolver.Resolver}.
+     * 
+     * @return true if the tag of this node was resolved
+     * 
+     * @deprecated Since v1.22.  Absent in immediately prior versions, but present previously.  Restored deprecated for backwards compatibility.
+     */
+    @Deprecated
+    public boolean isResolved() {
+<span class="nc" id="L179">        return resolved;</span>
+    }
+
+    public String getAnchor() {
+<span class="nc" id="L183">        return anchor;</span>
+    }
+
+    public void setAnchor(String anchor) {
+<span class="fc" id="L187">        this.anchor = anchor;</span>
+<span class="fc" id="L188">    }</span>
+
+    /**
+     * The ordered list of in-line comments. The first of which appears at the end of the line respresent by this node.
+     * The rest are in the following lines, indented per the Spec to indicate they are continuation of the inline comment.
+     * 
+     * @return the comment line list.
+     */
+    public List&lt;CommentLine&gt; getInLineComments() {
+<span class="nc" id="L197">        return inLineComments;</span>
+    }
+
+    public void setInLineComments(List&lt;CommentLine&gt; inLineComments) {
+<span class="fc" id="L201">        this.inLineComments = inLineComments;</span>
+<span class="fc" id="L202">    }</span>
+
+    /**
+     * The ordered list of blank lines and block comments (full line) that appear before this node.
+     * 
+     * @return the comment line list.
+     */
+    public List&lt;CommentLine&gt; getBlockComments() {
+<span class="nc" id="L210">        return blockComments;</span>
+    }
+
+    public void setBlockComments(List&lt;CommentLine&gt; blockComments) {
+<span class="fc" id="L214">        this.blockComments = blockComments;</span>
+<span class="fc" id="L215">    }</span>
+
+    /**
+     * The ordered list of blank lines and block comments (full line) that appear AFTER this node.
+     * &lt;p&gt;
+     * NOTE: these comment should occur only in the last node in a document, when walking the node tree &quot;in order&quot;
+     * 
+     * @return the comment line list.
+     */
+    public List&lt;CommentLine&gt; getEndComments() {
+<span class="nc" id="L225">        return endComments;</span>
+    }
+
+    public void setEndComments(List&lt;CommentLine&gt; endComments) {
+<span class="nc" id="L229">        this.endComments = endComments;</span>
+<span class="nc" id="L230">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,455 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SafeRepresenter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.representer</a> &gt; <span class="el_source">SafeRepresenter.java</span></div><h1>SafeRepresenter.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.representer;
+
+import java.io.UnsupportedEncodingException;
+import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TimeZone;
+import java.util.UUID;
+import java.util.regex.Pattern;
+
+import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.external.biz.base64Coder.Base64Coder;
+import org.yaml.snakeyaml.nodes.Node;
+import org.yaml.snakeyaml.nodes.Tag;
+import org.yaml.snakeyaml.reader.StreamReader;
+
+/**
+ * Represent standard Java classes
+ */
+class SafeRepresenter extends BaseRepresenter {
+
+    protected Map&lt;Class&lt;? extends Object&gt;, Tag&gt; classTags;
+<span class="fc" id="L47">    protected TimeZone timeZone = null;</span>
+    protected DumperOptions.NonPrintableStyle nonPrintableStyle;
+
+    public SafeRepresenter() {
+<span class="fc" id="L51">        this(new DumperOptions());</span>
+<span class="fc" id="L52">    }</span>
+
+<span class="fc" id="L54">    public SafeRepresenter(DumperOptions options) {</span>
+<span class="fc" id="L55">        this.nullRepresenter = new RepresentNull();</span>
+<span class="fc" id="L56">        this.representers.put(String.class, new RepresentString());</span>
+<span class="fc" id="L57">        this.representers.put(Boolean.class, new RepresentBoolean());</span>
+<span class="fc" id="L58">        this.representers.put(Character.class, new RepresentString());</span>
+<span class="fc" id="L59">        this.representers.put(UUID.class, new RepresentUuid());</span>
+<span class="fc" id="L60">        this.representers.put(byte[].class, new RepresentByteArray());</span>
+
+<span class="fc" id="L62">        Represent primitiveArray = new RepresentPrimitiveArray();</span>
+<span class="fc" id="L63">        representers.put(short[].class, primitiveArray);</span>
+<span class="fc" id="L64">        representers.put(int[].class, primitiveArray);</span>
+<span class="fc" id="L65">        representers.put(long[].class, primitiveArray);</span>
+<span class="fc" id="L66">        representers.put(float[].class, primitiveArray);</span>
+<span class="fc" id="L67">        representers.put(double[].class, primitiveArray);</span>
+<span class="fc" id="L68">        representers.put(char[].class, primitiveArray);</span>
+<span class="fc" id="L69">        representers.put(boolean[].class, primitiveArray);</span>
+
+<span class="fc" id="L71">        this.multiRepresenters.put(Number.class, new RepresentNumber());</span>
+<span class="fc" id="L72">        this.multiRepresenters.put(List.class, new RepresentList());</span>
+<span class="fc" id="L73">        this.multiRepresenters.put(Map.class, new RepresentMap());</span>
+<span class="fc" id="L74">        this.multiRepresenters.put(Set.class, new RepresentSet());</span>
+<span class="fc" id="L75">        this.multiRepresenters.put(Iterator.class, new RepresentIterator());</span>
+<span class="fc" id="L76">        this.multiRepresenters.put(new Object[0].getClass(), new RepresentArray());</span>
+<span class="fc" id="L77">        this.multiRepresenters.put(Date.class, new RepresentDate());</span>
+<span class="fc" id="L78">        this.multiRepresenters.put(Enum.class, new RepresentEnum());</span>
+<span class="fc" id="L79">        this.multiRepresenters.put(Calendar.class, new RepresentDate());</span>
+<span class="fc" id="L80">        classTags = new HashMap&lt;Class&lt;? extends Object&gt;, Tag&gt;();</span>
+<span class="fc" id="L81">        this.nonPrintableStyle = options.getNonPrintableStyle();</span>
+<span class="fc" id="L82">    }</span>
+
+    protected Tag getTag(Class&lt;?&gt; clazz, Tag defaultTag) {
+<span class="nc bnc" id="L85" title="All 2 branches missed.">        if (classTags.containsKey(clazz)) {</span>
+<span class="nc" id="L86">            return classTags.get(clazz);</span>
+        } else {
+<span class="nc" id="L88">            return defaultTag;</span>
+        }
+    }
+
+    /**
+     * Define a tag for the &lt;code&gt;Class&lt;/code&gt; to serialize.
+     *
+     * @param clazz
+     *            &lt;code&gt;Class&lt;/code&gt; which tag is changed
+     * @param tag
+     *            new tag to be used for every instance of the specified
+     *            &lt;code&gt;Class&lt;/code&gt;
+     * @return the previous tag associated with the &lt;code&gt;Class&lt;/code&gt;
+     */
+    public Tag addClassTag(Class&lt;? extends Object&gt; clazz, Tag tag) {
+<span class="nc bnc" id="L103" title="All 2 branches missed.">        if (tag == null) {</span>
+<span class="nc" id="L104">            throw new NullPointerException(&quot;Tag must be provided.&quot;);</span>
+        }
+<span class="nc" id="L106">        return classTags.put(clazz, tag);</span>
+    }
+
+<span class="fc" id="L109">    protected class RepresentNull implements Represent {</span>
+        public Node representData(Object data) {
+<span class="nc" id="L111">            return representScalar(Tag.NULL, &quot;null&quot;);</span>
+        }
+    }
+
+<span class="fc" id="L115">    private static final Pattern MULTILINE_PATTERN = Pattern.compile(&quot;\n|\u0085|\u2028|\u2029&quot;);</span>
+
+<span class="fc" id="L117">    protected class RepresentString implements Represent {</span>
+        public Node representData(Object data) {
+<span class="nc" id="L119">            Tag tag = Tag.STR;</span>
+<span class="nc" id="L120">            DumperOptions.ScalarStyle style = null;//not defined</span>
+<span class="nc" id="L121">            String value = data.toString();</span>
+<span class="nc bnc" id="L122" title="All 4 branches missed.">            if (nonPrintableStyle == DumperOptions.NonPrintableStyle.BINARY &amp;&amp; !StreamReader.isPrintable(value)) {</span>
+<span class="nc" id="L123">                tag = Tag.BINARY;</span>
+                char[] binary;
+                try {
+<span class="nc" id="L126">                    final byte[] bytes = value.getBytes(&quot;UTF-8&quot;);</span>
+                    // sometimes above will just silently fail - it will return incomplete data
+                    // it happens when String has invalid code points
+                    // (for example half surrogate character without other half)
+<span class="nc" id="L130">                    final String checkValue = new String(bytes, &quot;UTF-8&quot;);</span>
+<span class="nc bnc" id="L131" title="All 2 branches missed.">                    if (!checkValue.equals(value)) {</span>
+<span class="nc" id="L132">                        throw new YAMLException(&quot;invalid string value has occurred&quot;);</span>
+                    }
+<span class="nc" id="L134">                    binary = Base64Coder.encode(bytes);</span>
+<span class="nc" id="L135">                } catch (UnsupportedEncodingException e) {</span>
+<span class="nc" id="L136">                    throw new YAMLException(e);</span>
+                }
+<span class="nc" id="L138">                value = String.valueOf(binary);</span>
+<span class="nc" id="L139">                style = DumperOptions.ScalarStyle.LITERAL;</span>
+            }
+            // if no other scalar style is explicitly set, use literal style for
+            // multiline scalars
+<span class="nc bnc" id="L143" title="All 4 branches missed.">            if (defaultScalarStyle == DumperOptions.ScalarStyle.PLAIN &amp;&amp; MULTILINE_PATTERN.matcher(value).find()) {</span>
+<span class="nc" id="L144">                style = DumperOptions.ScalarStyle.LITERAL;</span>
+            }
+<span class="nc" id="L146">            return representScalar(tag, value, style);</span>
+        }
+    }
+
+<span class="fc" id="L150">    protected class RepresentBoolean implements Represent {</span>
+        public Node representData(Object data) {
+            String value;
+<span class="nc bnc" id="L153" title="All 2 branches missed.">            if (Boolean.TRUE.equals(data)) {</span>
+<span class="nc" id="L154">                value = &quot;true&quot;;</span>
+<span class="nc" id="L155">            } else {</span>
+<span class="nc" id="L156">                value = &quot;false&quot;;</span>
+            }
+<span class="nc" id="L158">            return representScalar(Tag.BOOL, value);</span>
+        }
+    }
+
+<span class="fc" id="L162">    protected class RepresentNumber implements Represent {</span>
+        public Node representData(Object data) {
+            Tag tag;
+            String value;
+<span class="nc bnc" id="L166" title="All 6 branches missed.">            if (data instanceof Byte || data instanceof Short || data instanceof Integer</span>
+<span class="nc bnc" id="L167" title="All 4 branches missed.">                    || data instanceof Long || data instanceof BigInteger) {</span>
+<span class="nc" id="L168">                tag = Tag.INT;</span>
+<span class="nc" id="L169">                value = data.toString();</span>
+<span class="nc" id="L170">            } else {</span>
+<span class="nc" id="L171">                Number number = (Number) data;</span>
+<span class="nc" id="L172">                tag = Tag.FLOAT;</span>
+<span class="nc bnc" id="L173" title="All 2 branches missed.">                if (number.equals(Double.NaN)) {</span>
+<span class="nc" id="L174">                    value = &quot;.NaN&quot;;</span>
+<span class="nc bnc" id="L175" title="All 2 branches missed.">                } else if (number.equals(Double.POSITIVE_INFINITY)) {</span>
+<span class="nc" id="L176">                    value = &quot;.inf&quot;;</span>
+<span class="nc bnc" id="L177" title="All 2 branches missed.">                } else if (number.equals(Double.NEGATIVE_INFINITY)) {</span>
+<span class="nc" id="L178">                    value = &quot;-.inf&quot;;</span>
+<span class="nc" id="L179">                } else {</span>
+<span class="nc" id="L180">                    value = number.toString();</span>
+                }
+            }
+<span class="nc" id="L183">            return representScalar(getTag(data.getClass(), tag), value);</span>
+        }
+    }
+
+<span class="fc" id="L187">    protected class RepresentList implements Represent {</span>
+        @SuppressWarnings(&quot;unchecked&quot;)
+        public Node representData(Object data) {
+<span class="nc" id="L190">            return representSequence(getTag(data.getClass(), Tag.SEQ), (List&lt;Object&gt;) data, DumperOptions.FlowStyle.AUTO);</span>
+        }
+    }
+
+<span class="fc" id="L194">    protected class RepresentIterator implements Represent {</span>
+        @SuppressWarnings(&quot;unchecked&quot;)
+        public Node representData(Object data) {
+<span class="nc" id="L197">            Iterator&lt;Object&gt; iter = (Iterator&lt;Object&gt;) data;</span>
+<span class="nc" id="L198">            return representSequence(getTag(data.getClass(), Tag.SEQ), new IteratorWrapper(iter),</span>
+<span class="nc" id="L199">                    DumperOptions.FlowStyle.AUTO);</span>
+        }
+    }
+
+    private static class IteratorWrapper implements Iterable&lt;Object&gt; {
+        private Iterator&lt;Object&gt; iter;
+
+<span class="nc" id="L206">        public IteratorWrapper(Iterator&lt;Object&gt; iter) {</span>
+<span class="nc" id="L207">            this.iter = iter;</span>
+<span class="nc" id="L208">        }</span>
+
+        public Iterator&lt;Object&gt; iterator() {
+<span class="nc" id="L211">            return iter;</span>
+        }
+    }
+
+<span class="fc" id="L215">    protected class RepresentArray implements Represent {</span>
+        public Node representData(Object data) {
+<span class="nc" id="L217">            Object[] array = (Object[]) data;</span>
+<span class="nc" id="L218">            List&lt;Object&gt; list = Arrays.asList(array);</span>
+<span class="nc" id="L219">            return representSequence(Tag.SEQ, list, DumperOptions.FlowStyle.AUTO);</span>
+        }
+    }
+
+    /**
+     * Represents primitive arrays, such as short[] and float[], by converting
+     * them into equivalent List&lt;Short&gt; and List&lt;Float&gt; using the appropriate
+     * autoboxing type.
+     */
+<span class="fc" id="L228">    protected class RepresentPrimitiveArray implements Represent {</span>
+        public Node representData(Object data) {
+<span class="nc" id="L230">            Class&lt;?&gt; type = data.getClass().getComponentType();</span>
+
+<span class="nc bnc" id="L232" title="All 2 branches missed.">            if (byte.class == type) {</span>
+<span class="nc" id="L233">                return representSequence(Tag.SEQ, asByteList(data), DumperOptions.FlowStyle.AUTO);</span>
+<span class="nc bnc" id="L234" title="All 2 branches missed.">            } else if (short.class == type) {</span>
+<span class="nc" id="L235">                return representSequence(Tag.SEQ, asShortList(data), DumperOptions.FlowStyle.AUTO);</span>
+<span class="nc bnc" id="L236" title="All 2 branches missed.">            } else if (int.class == type) {</span>
+<span class="nc" id="L237">                return representSequence(Tag.SEQ, asIntList(data), DumperOptions.FlowStyle.AUTO);</span>
+<span class="nc bnc" id="L238" title="All 2 branches missed.">            } else if (long.class == type) {</span>
+<span class="nc" id="L239">                return representSequence(Tag.SEQ, asLongList(data), DumperOptions.FlowStyle.AUTO);</span>
+<span class="nc bnc" id="L240" title="All 2 branches missed.">            } else if (float.class == type) {</span>
+<span class="nc" id="L241">                return representSequence(Tag.SEQ, asFloatList(data), DumperOptions.FlowStyle.AUTO);</span>
+<span class="nc bnc" id="L242" title="All 2 branches missed.">            } else if (double.class == type) {</span>
+<span class="nc" id="L243">                return representSequence(Tag.SEQ, asDoubleList(data), DumperOptions.FlowStyle.AUTO);</span>
+<span class="nc bnc" id="L244" title="All 2 branches missed.">            } else if (char.class == type) {</span>
+<span class="nc" id="L245">                return representSequence(Tag.SEQ, asCharList(data), DumperOptions.FlowStyle.AUTO);</span>
+<span class="nc bnc" id="L246" title="All 2 branches missed.">            } else if (boolean.class == type) {</span>
+<span class="nc" id="L247">                return representSequence(Tag.SEQ, asBooleanList(data), DumperOptions.FlowStyle.AUTO);</span>
+            }
+
+<span class="nc" id="L250">            throw new YAMLException(&quot;Unexpected primitive '&quot; + type.getCanonicalName() + &quot;'&quot;);</span>
+        }
+
+        private List&lt;Byte&gt; asByteList(Object in) {
+<span class="nc" id="L254">            byte[] array = (byte[]) in;</span>
+<span class="nc" id="L255">            List&lt;Byte&gt; list = new ArrayList&lt;Byte&gt;(array.length);</span>
+<span class="nc bnc" id="L256" title="All 2 branches missed.">            for (int i = 0; i &lt; array.length; ++i)</span>
+<span class="nc" id="L257">                list.add(array[i]);</span>
+<span class="nc" id="L258">            return list;</span>
+        }
+
+        private List&lt;Short&gt; asShortList(Object in) {
+<span class="nc" id="L262">            short[] array = (short[]) in;</span>
+<span class="nc" id="L263">            List&lt;Short&gt; list = new ArrayList&lt;Short&gt;(array.length);</span>
+<span class="nc bnc" id="L264" title="All 2 branches missed.">            for (int i = 0; i &lt; array.length; ++i)</span>
+<span class="nc" id="L265">                list.add(array[i]);</span>
+<span class="nc" id="L266">            return list;</span>
+        }
+
+        private List&lt;Integer&gt; asIntList(Object in) {
+<span class="nc" id="L270">            int[] array = (int[]) in;</span>
+<span class="nc" id="L271">            List&lt;Integer&gt; list = new ArrayList&lt;Integer&gt;(array.length);</span>
+<span class="nc bnc" id="L272" title="All 2 branches missed.">            for (int i = 0; i &lt; array.length; ++i)</span>
+<span class="nc" id="L273">                list.add(array[i]);</span>
+<span class="nc" id="L274">            return list;</span>
+        }
+
+        private List&lt;Long&gt; asLongList(Object in) {
+<span class="nc" id="L278">            long[] array = (long[]) in;</span>
+<span class="nc" id="L279">            List&lt;Long&gt; list = new ArrayList&lt;Long&gt;(array.length);</span>
+<span class="nc bnc" id="L280" title="All 2 branches missed.">            for (int i = 0; i &lt; array.length; ++i)</span>
+<span class="nc" id="L281">                list.add(array[i]);</span>
+<span class="nc" id="L282">            return list;</span>
+        }
+
+        private List&lt;Float&gt; asFloatList(Object in) {
+<span class="nc" id="L286">            float[] array = (float[]) in;</span>
+<span class="nc" id="L287">            List&lt;Float&gt; list = new ArrayList&lt;Float&gt;(array.length);</span>
+<span class="nc bnc" id="L288" title="All 2 branches missed.">            for (int i = 0; i &lt; array.length; ++i)</span>
+<span class="nc" id="L289">                list.add(array[i]);</span>
+<span class="nc" id="L290">            return list;</span>
+        }
+
+        private List&lt;Double&gt; asDoubleList(Object in) {
+<span class="nc" id="L294">            double[] array = (double[]) in;</span>
+<span class="nc" id="L295">            List&lt;Double&gt; list = new ArrayList&lt;Double&gt;(array.length);</span>
+<span class="nc bnc" id="L296" title="All 2 branches missed.">            for (int i = 0; i &lt; array.length; ++i)</span>
+<span class="nc" id="L297">                list.add(array[i]);</span>
+<span class="nc" id="L298">            return list;</span>
+        }
+
+        private List&lt;Character&gt; asCharList(Object in) {
+<span class="nc" id="L302">            char[] array = (char[]) in;</span>
+<span class="nc" id="L303">            List&lt;Character&gt; list = new ArrayList&lt;Character&gt;(array.length);</span>
+<span class="nc bnc" id="L304" title="All 2 branches missed.">            for (int i = 0; i &lt; array.length; ++i)</span>
+<span class="nc" id="L305">                list.add(array[i]);</span>
+<span class="nc" id="L306">            return list;</span>
+        }
+
+        private List&lt;Boolean&gt; asBooleanList(Object in) {
+<span class="nc" id="L310">            boolean[] array = (boolean[]) in;</span>
+<span class="nc" id="L311">            List&lt;Boolean&gt; list = new ArrayList&lt;Boolean&gt;(array.length);</span>
+<span class="nc bnc" id="L312" title="All 2 branches missed.">            for (int i = 0; i &lt; array.length; ++i)</span>
+<span class="nc" id="L313">                list.add(array[i]);</span>
+<span class="nc" id="L314">            return list;</span>
+        }
+    }
+
+<span class="fc" id="L318">    protected class RepresentMap implements Represent {</span>
+        @SuppressWarnings(&quot;unchecked&quot;)
+        public Node representData(Object data) {
+<span class="nc" id="L321">            return representMapping(getTag(data.getClass(), Tag.MAP), (Map&lt;Object, Object&gt;) data,</span>
+<span class="nc" id="L322">                    DumperOptions.FlowStyle.AUTO);</span>
+        }
+    }
+
+<span class="fc" id="L326">    protected class RepresentSet implements Represent {</span>
+        @SuppressWarnings(&quot;unchecked&quot;)
+        public Node representData(Object data) {
+<span class="nc" id="L329">            Map&lt;Object, Object&gt; value = new LinkedHashMap&lt;Object, Object&gt;();</span>
+<span class="nc" id="L330">            Set&lt;Object&gt; set = (Set&lt;Object&gt;) data;</span>
+<span class="nc bnc" id="L331" title="All 2 branches missed.">            for (Object key : set) {</span>
+<span class="nc" id="L332">                value.put(key, null);</span>
+            }
+<span class="nc" id="L334">            return representMapping(getTag(data.getClass(), Tag.SET), value, DumperOptions.FlowStyle.AUTO);</span>
+        }
+    }
+
+<span class="fc" id="L338">    protected class RepresentDate implements Represent {</span>
+        public Node representData(Object data) {
+            // because SimpleDateFormat ignores timezone we have to use Calendar
+            Calendar calendar;
+<span class="nc bnc" id="L342" title="All 2 branches missed.">            if (data instanceof Calendar) {</span>
+<span class="nc" id="L343">                calendar = (Calendar) data;</span>
+<span class="nc" id="L344">            } else {</span>
+<span class="nc bnc" id="L345" title="All 2 branches missed.">                calendar = Calendar.getInstance(getTimeZone() == null ? TimeZone.getTimeZone(&quot;UTC&quot;)</span>
+<span class="nc" id="L346">                        : timeZone);</span>
+<span class="nc" id="L347">                calendar.setTime((Date) data);</span>
+            }
+<span class="nc" id="L349">            int years = calendar.get(Calendar.YEAR);</span>
+<span class="nc" id="L350">            int months = calendar.get(Calendar.MONTH) + 1; // 0..12</span>
+<span class="nc" id="L351">            int days = calendar.get(Calendar.DAY_OF_MONTH); // 1..31</span>
+<span class="nc" id="L352">            int hour24 = calendar.get(Calendar.HOUR_OF_DAY); // 0..24</span>
+<span class="nc" id="L353">            int minutes = calendar.get(Calendar.MINUTE); // 0..59</span>
+<span class="nc" id="L354">            int seconds = calendar.get(Calendar.SECOND); // 0..59</span>
+<span class="nc" id="L355">            int millis = calendar.get(Calendar.MILLISECOND);</span>
+<span class="nc" id="L356">            StringBuilder buffer = new StringBuilder(String.valueOf(years));</span>
+<span class="nc bnc" id="L357" title="All 2 branches missed.">            while (buffer.length() &lt; 4) {</span>
+                // ancient years
+<span class="nc" id="L359">                buffer.insert(0, &quot;0&quot;);</span>
+            }
+<span class="nc" id="L361">            buffer.append(&quot;-&quot;);</span>
+<span class="nc bnc" id="L362" title="All 2 branches missed.">            if (months &lt; 10) {</span>
+<span class="nc" id="L363">                buffer.append(&quot;0&quot;);</span>
+            }
+<span class="nc" id="L365">            buffer.append(String.valueOf(months));</span>
+<span class="nc" id="L366">            buffer.append(&quot;-&quot;);</span>
+<span class="nc bnc" id="L367" title="All 2 branches missed.">            if (days &lt; 10) {</span>
+<span class="nc" id="L368">                buffer.append(&quot;0&quot;);</span>
+            }
+<span class="nc" id="L370">            buffer.append(String.valueOf(days));</span>
+<span class="nc" id="L371">            buffer.append(&quot;T&quot;);</span>
+<span class="nc bnc" id="L372" title="All 2 branches missed.">            if (hour24 &lt; 10) {</span>
+<span class="nc" id="L373">                buffer.append(&quot;0&quot;);</span>
+            }
+<span class="nc" id="L375">            buffer.append(String.valueOf(hour24));</span>
+<span class="nc" id="L376">            buffer.append(&quot;:&quot;);</span>
+<span class="nc bnc" id="L377" title="All 2 branches missed.">            if (minutes &lt; 10) {</span>
+<span class="nc" id="L378">                buffer.append(&quot;0&quot;);</span>
+            }
+<span class="nc" id="L380">            buffer.append(String.valueOf(minutes));</span>
+<span class="nc" id="L381">            buffer.append(&quot;:&quot;);</span>
+<span class="nc bnc" id="L382" title="All 2 branches missed.">            if (seconds &lt; 10) {</span>
+<span class="nc" id="L383">                buffer.append(&quot;0&quot;);</span>
+            }
+<span class="nc" id="L385">            buffer.append(String.valueOf(seconds));</span>
+<span class="nc bnc" id="L386" title="All 2 branches missed.">            if (millis &gt; 0) {</span>
+<span class="nc bnc" id="L387" title="All 2 branches missed.">                if (millis &lt; 10) {</span>
+<span class="nc" id="L388">                    buffer.append(&quot;.00&quot;);</span>
+<span class="nc bnc" id="L389" title="All 2 branches missed.">                } else if (millis &lt; 100) {</span>
+<span class="nc" id="L390">                    buffer.append(&quot;.0&quot;);</span>
+<span class="nc" id="L391">                } else {</span>
+<span class="nc" id="L392">                    buffer.append(&quot;.&quot;);</span>
+                }
+<span class="nc" id="L394">                buffer.append(String.valueOf(millis));</span>
+            }
+
+            // Get the offset from GMT taking DST into account
+<span class="nc" id="L398">            int gmtOffset = calendar.getTimeZone().getOffset(calendar.getTime().getTime());</span>
+<span class="nc bnc" id="L399" title="All 2 branches missed.">            if (gmtOffset == 0) {</span>
+<span class="nc" id="L400">                buffer.append('Z');</span>
+<span class="nc" id="L401">            } else {</span>
+<span class="nc bnc" id="L402" title="All 2 branches missed.">                if (gmtOffset &lt; 0) {</span>
+<span class="nc" id="L403">                    buffer.append('-');</span>
+<span class="nc" id="L404">                    gmtOffset *= -1;</span>
+<span class="nc" id="L405">                } else {</span>
+<span class="nc" id="L406">                    buffer.append('+');</span>
+                }
+<span class="nc" id="L408">                int minutesOffset = gmtOffset / (60 * 1000);</span>
+<span class="nc" id="L409">                int hoursOffset = minutesOffset / 60;</span>
+<span class="nc" id="L410">                int partOfHour = minutesOffset % 60;</span>
+
+<span class="nc bnc" id="L412" title="All 2 branches missed.">                if (hoursOffset &lt; 10) {</span>
+<span class="nc" id="L413">                    buffer.append('0');</span>
+                }
+<span class="nc" id="L415">                buffer.append(hoursOffset);</span>
+<span class="nc" id="L416">                buffer.append(':');</span>
+<span class="nc bnc" id="L417" title="All 2 branches missed.">                if (partOfHour &lt; 10) {</span>
+<span class="nc" id="L418">                    buffer.append('0');</span>
+                }
+<span class="nc" id="L420">                buffer.append(partOfHour);</span>
+            }
+
+<span class="nc" id="L423">            return representScalar(getTag(data.getClass(), Tag.TIMESTAMP), buffer.toString(), DumperOptions.ScalarStyle.PLAIN);</span>
+        }
+    }
+
+<span class="fc" id="L427">    protected class RepresentEnum implements Represent {</span>
+        public Node representData(Object data) {
+<span class="nc" id="L429">            Tag tag = new Tag(data.getClass());</span>
+<span class="nc" id="L430">            return representScalar(getTag(data.getClass(), tag), ((Enum&lt;?&gt;) data).name());</span>
+        }
+    }
+
+<span class="fc" id="L434">    protected class RepresentByteArray implements Represent {</span>
+        public Node representData(Object data) {
+<span class="nc" id="L436">            char[] binary = Base64Coder.encode((byte[]) data);</span>
+<span class="nc" id="L437">            return representScalar(Tag.BINARY, String.valueOf(binary), DumperOptions.ScalarStyle.LITERAL);</span>
+        }
+    }
+
+    public TimeZone getTimeZone() {
+<span class="nc" id="L442">        return timeZone;</span>
+    }
+
+    public void setTimeZone(TimeZone timeZone) {
+<span class="fc" id="L446">        this.timeZone = timeZone;</span>
+<span class="fc" id="L447">    }</span>
+
+<span class="fc" id="L449">    protected class RepresentUuid implements Represent {</span>
+        public Node representData(Object data) {
+<span class="nc" id="L451">            return representScalar(getTag(data.getClass(), new Tag(UUID.class)), data.toString());</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

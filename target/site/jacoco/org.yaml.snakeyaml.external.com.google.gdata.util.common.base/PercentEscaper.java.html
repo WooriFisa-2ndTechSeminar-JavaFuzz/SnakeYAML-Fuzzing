@@ -1,0 +1,282 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PercentEscaper.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.external.com.google.gdata.util.common.base</a> &gt; <span class="el_source">PercentEscaper.java</span></div><h1>PercentEscaper.java</h1><pre class="source lang-java linenums">/* Copyright (c) 2008 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.yaml.snakeyaml.external.com.google.gdata.util.common.base;
+
+/**
+ * A {@code UnicodeEscaper} that escapes some set of Java characters using the
+ * URI percent encoding scheme. The set of safe characters (those which remain
+ * unescaped) can be specified on construction.
+ * 
+ * &lt;p&gt;
+ * For details on escaping URIs for use in web pages, see section 2.4 of &lt;a
+ * href=&quot;http://www.ietf.org/rfc/rfc3986.txt&quot;&gt;RFC 3986&lt;/a&gt;.
+ * 
+ * &lt;p&gt;
+ * In most cases this class should not need to be used directly. If you have no
+ * special requirements for escaping your URIs, you should use either
+ * {@link CharEscapers#uriEscaper()} or {@link CharEscapers#uriEscaper(boolean)}.
+ * 
+ * &lt;p&gt;
+ * When encoding a String, the following rules apply:
+ * &lt;ul&gt;
+ * &lt;li&gt;The alphanumeric characters &quot;a&quot; through &quot;z&quot;, &quot;A&quot; through &quot;Z&quot; and &quot;0&quot;
+ * through &quot;9&quot; remain the same.
+ * &lt;li&gt;Any additionally specified safe characters remain the same.
+ * &lt;li&gt;If {@code plusForSpace} was specified, the space character &quot; &quot; is
+ * converted into a plus sign &quot;+&quot;.
+ * &lt;li&gt;All other characters are converted into one or more bytes using UTF-8
+ * encoding and each byte is then represented by the 3-character string &quot;%XY&quot;,
+ * where &quot;XY&quot; is the two-digit, uppercase, hexadecimal representation of the
+ * byte value.
+ * &lt;/ul&gt;
+ * 
+ * &lt;p&gt;
+ * RFC 2396 specifies the set of unreserved characters as &quot;-&quot;, &quot;_&quot;, &quot;.&quot;, &quot;!&quot;,
+ * &quot;~&quot;, &quot;*&quot;, &quot;'&quot;, &quot;(&quot; and &quot;)&quot;. It goes on to state:
+ * 
+ * &lt;p&gt;
+ * &lt;i&gt;Unreserved characters can be escaped without changing the semantics of the
+ * URI, but this should not be done unless the URI is being used in a context
+ * that does not allow the unescaped character to appear.&lt;/i&gt;
+ * 
+ * &lt;p&gt;
+ * For performance reasons the only currently supported character encoding of
+ * this class is UTF-8.
+ * 
+ * &lt;p&gt;
+ * &lt;b&gt;Note&lt;/b&gt;: This escaper produces uppercase hexidecimal sequences. From &lt;a
+ * href=&quot;http://www.ietf.org/rfc/rfc3986.txt&quot;&gt;RFC 3986&lt;/a&gt;:&lt;br&gt;
+ * &lt;i&gt;&quot;URI producers and normalizers should use uppercase hexadecimal digits for
+ * all percent-encodings.&quot;&lt;/i&gt;
+ * 
+ * 
+ */
+public class PercentEscaper extends UnicodeEscaper {
+    /**
+     * A string of safe characters that mimics the behavior of
+     * {@link java.net.URLEncoder}.
+     * 
+     */
+    public static final String SAFECHARS_URLENCODER = &quot;-_.*&quot;;
+
+    /**
+     * A string of characters that do not need to be encoded when used in URI
+     * path segments, as specified in RFC 3986. Note that some of these
+     * characters do need to be escaped when used in other parts of the URI.
+     */
+    public static final String SAFEPATHCHARS_URLENCODER = &quot;-_.!~*'()@:$&amp;,;=&quot;;
+
+    /**
+     * A string of characters that do not need to be encoded when used in URI
+     * query strings, as specified in RFC 3986. Note that some of these
+     * characters do need to be escaped when used in other parts of the URI.
+     */
+    public static final String SAFEQUERYSTRINGCHARS_URLENCODER = &quot;-_.!~*'()@:$,;/?:&quot;;
+
+    // In some uri escapers spaces are escaped to '+'
+<span class="fc" id="L90">    private static final char[] URI_ESCAPED_SPACE = { '+' };</span>
+
+<span class="fc" id="L92">    private static final char[] UPPER_HEX_DIGITS = &quot;0123456789ABCDEF&quot;.toCharArray();</span>
+
+    /**
+     * If true we should convert space to the {@code +} character.
+     */
+    private final boolean plusForSpace;
+
+    /**
+     * An array of flags where for any {@code char c} if {@code safeOctets[c]}
+     * is true then {@code c} should remain unmodified in the output. If
+     * {@code c &gt; safeOctets.length} then it should be escaped.
+     */
+    private final boolean[] safeOctets;
+
+    /**
+     * Constructs a URI escaper with the specified safe characters and optional
+     * handling of the space character.
+     * 
+     * @param safeChars
+     *            a non null string specifying additional safe characters for
+     *            this escaper (the ranges 0..9, a..z and A..Z are always safe
+     *            and should not be specified here)
+     * @param plusForSpace
+     *            true if ASCII space should be escaped to {@code +} rather than
+     *            {@code %20}
+     * @throws IllegalArgumentException
+     *             if any of the parameters were invalid
+     */
+<span class="fc" id="L120">    public PercentEscaper(String safeChars, boolean plusForSpace) {</span>
+        // Avoid any misunderstandings about the behavior of this escaper
+<span class="pc bpc" id="L122" title="1 of 2 branches missed.">        if (safeChars.matches(&quot;.*[0-9A-Za-z].*&quot;)) {</span>
+<span class="nc" id="L123">            throw new IllegalArgumentException(</span>
+<span class="nc" id="L124">                    &quot;Alphanumeric characters are always 'safe' and should not be &quot;</span>
+                            + &quot;explicitly specified&quot;);
+        }
+        // Avoid ambiguous parameters. Safe characters are never modified so if
+        // space is a safe character then setting plusForSpace is meaningless.
+<span class="pc bpc" id="L129" title="3 of 4 branches missed.">        if (plusForSpace &amp;&amp; safeChars.contains(&quot; &quot;)) {</span>
+<span class="nc" id="L130">            throw new IllegalArgumentException(</span>
+<span class="nc" id="L131">                    &quot;plusForSpace cannot be specified when space is a 'safe' character&quot;);</span>
+        }
+<span class="pc bpc" id="L133" title="1 of 2 branches missed.">        if (safeChars.contains(&quot;%&quot;)) {</span>
+<span class="nc" id="L134">            throw new IllegalArgumentException(&quot;The '%' character cannot be specified as 'safe'&quot;);</span>
+        }
+<span class="fc" id="L136">        this.plusForSpace = plusForSpace;</span>
+<span class="fc" id="L137">        this.safeOctets = createSafeOctets(safeChars);</span>
+<span class="fc" id="L138">    }</span>
+
+    /**
+     * Creates a boolean[] with entries corresponding to the character values
+     * for 0-9, A-Z, a-z and those specified in safeChars set to true. The array
+     * is as small as is required to hold the given character information.
+     */
+    private static boolean[] createSafeOctets(String safeChars) {
+<span class="fc" id="L146">        int maxChar = 'z';</span>
+<span class="fc" id="L147">        char[] safeCharArray = safeChars.toCharArray();</span>
+<span class="fc bfc" id="L148" title="All 2 branches covered.">        for (char c : safeCharArray) {</span>
+<span class="fc" id="L149">            maxChar = Math.max(c, maxChar);</span>
+        }
+<span class="fc" id="L151">        boolean[] octets = new boolean[maxChar + 1];</span>
+<span class="fc bfc" id="L152" title="All 2 branches covered.">        for (int c = '0'; c &lt;= '9'; c++) {</span>
+<span class="fc" id="L153">            octets[c] = true;</span>
+        }
+<span class="fc bfc" id="L155" title="All 2 branches covered.">        for (int c = 'A'; c &lt;= 'Z'; c++) {</span>
+<span class="fc" id="L156">            octets[c] = true;</span>
+        }
+<span class="fc bfc" id="L158" title="All 2 branches covered.">        for (int c = 'a'; c &lt;= 'z'; c++) {</span>
+<span class="fc" id="L159">            octets[c] = true;</span>
+        }
+<span class="fc bfc" id="L161" title="All 2 branches covered.">        for (char c : safeCharArray) {</span>
+<span class="fc" id="L162">            octets[c] = true;</span>
+        }
+<span class="fc" id="L164">        return octets;</span>
+    }
+
+    /*
+     * Overridden for performance. For unescaped strings this improved the
+     * performance of the uri escaper from ~760ns to ~400ns as measured by
+     * {@link CharEscapersBenchmark}.
+     */
+    @Override
+    protected int nextEscapeIndex(CharSequence csq, int index, int end) {
+<span class="fc bfc" id="L174" title="All 2 branches covered.">        for (; index &lt; end; index++) {</span>
+<span class="fc" id="L175">            char c = csq.charAt(index);</span>
+<span class="pc bpc" id="L176" title="1 of 4 branches missed.">            if (c &gt;= safeOctets.length || !safeOctets[c]) {</span>
+<span class="fc" id="L177">                break;</span>
+            }
+        }
+<span class="fc" id="L180">        return index;</span>
+    }
+
+    /*
+     * Overridden for performance. For unescaped strings this improved the
+     * performance of the uri escaper from ~400ns to ~170ns as measured by
+     * {@link CharEscapersBenchmark}.
+     */
+    @Override
+    public String escape(String s) {
+<span class="fc" id="L190">        int slen = s.length();</span>
+<span class="fc bfc" id="L191" title="All 2 branches covered.">        for (int index = 0; index &lt; slen; index++) {</span>
+<span class="fc" id="L192">            char c = s.charAt(index);</span>
+<span class="pc bpc" id="L193" title="1 of 4 branches missed.">            if (c &gt;= safeOctets.length || !safeOctets[c]) {</span>
+<span class="fc" id="L194">                return escapeSlow(s, index);</span>
+            }
+        }
+<span class="fc" id="L197">        return s;</span>
+    }
+
+    /**
+     * Escapes the given Unicode code point in UTF-8.
+     */
+    @Override
+    protected char[] escape(int cp) {
+        // We should never get negative values here but if we do it will throw
+        // an
+        // IndexOutOfBoundsException, so at least it will get spotted.
+<span class="pc bpc" id="L208" title="2 of 4 branches missed.">        if (cp &lt; safeOctets.length &amp;&amp; safeOctets[cp]) {</span>
+<span class="nc" id="L209">            return null;</span>
+<span class="pc bpc" id="L210" title="1 of 4 branches missed.">        } else if (cp == ' ' &amp;&amp; plusForSpace) {</span>
+<span class="nc" id="L211">            return URI_ESCAPED_SPACE;</span>
+<span class="pc bpc" id="L212" title="1 of 2 branches missed.">        } else if (cp &lt;= 0x7F) {</span>
+            // Single byte UTF-8 characters
+            // Start with &quot;%--&quot; and fill in the blanks
+<span class="fc" id="L215">            char[] dest = new char[3];</span>
+<span class="fc" id="L216">            dest[0] = '%';</span>
+<span class="fc" id="L217">            dest[2] = UPPER_HEX_DIGITS[cp &amp; 0xF];</span>
+<span class="fc" id="L218">            dest[1] = UPPER_HEX_DIGITS[cp &gt;&gt;&gt; 4];</span>
+<span class="fc" id="L219">            return dest;</span>
+<span class="nc bnc" id="L220" title="All 2 branches missed.">        } else if (cp &lt;= 0x7ff) {</span>
+            // Two byte UTF-8 characters [cp &gt;= 0x80 &amp;&amp; cp &lt;= 0x7ff]
+            // Start with &quot;%--%--&quot; and fill in the blanks
+<span class="nc" id="L223">            char[] dest = new char[6];</span>
+<span class="nc" id="L224">            dest[0] = '%';</span>
+<span class="nc" id="L225">            dest[3] = '%';</span>
+<span class="nc" id="L226">            dest[5] = UPPER_HEX_DIGITS[cp &amp; 0xF];</span>
+<span class="nc" id="L227">            cp &gt;&gt;&gt;= 4;</span>
+<span class="nc" id="L228">            dest[4] = UPPER_HEX_DIGITS[0x8 | (cp &amp; 0x3)];</span>
+<span class="nc" id="L229">            cp &gt;&gt;&gt;= 2;</span>
+<span class="nc" id="L230">            dest[2] = UPPER_HEX_DIGITS[cp &amp; 0xF];</span>
+<span class="nc" id="L231">            cp &gt;&gt;&gt;= 4;</span>
+<span class="nc" id="L232">            dest[1] = UPPER_HEX_DIGITS[0xC | cp];</span>
+<span class="nc" id="L233">            return dest;</span>
+<span class="nc bnc" id="L234" title="All 2 branches missed.">        } else if (cp &lt;= 0xffff) {</span>
+            // Three byte UTF-8 characters [cp &gt;= 0x800 &amp;&amp; cp &lt;= 0xffff]
+            // Start with &quot;%E-%--%--&quot; and fill in the blanks
+<span class="nc" id="L237">            char[] dest = new char[9];</span>
+<span class="nc" id="L238">            dest[0] = '%';</span>
+<span class="nc" id="L239">            dest[1] = 'E';</span>
+<span class="nc" id="L240">            dest[3] = '%';</span>
+<span class="nc" id="L241">            dest[6] = '%';</span>
+<span class="nc" id="L242">            dest[8] = UPPER_HEX_DIGITS[cp &amp; 0xF];</span>
+<span class="nc" id="L243">            cp &gt;&gt;&gt;= 4;</span>
+<span class="nc" id="L244">            dest[7] = UPPER_HEX_DIGITS[0x8 | (cp &amp; 0x3)];</span>
+<span class="nc" id="L245">            cp &gt;&gt;&gt;= 2;</span>
+<span class="nc" id="L246">            dest[5] = UPPER_HEX_DIGITS[cp &amp; 0xF];</span>
+<span class="nc" id="L247">            cp &gt;&gt;&gt;= 4;</span>
+<span class="nc" id="L248">            dest[4] = UPPER_HEX_DIGITS[0x8 | (cp &amp; 0x3)];</span>
+<span class="nc" id="L249">            cp &gt;&gt;&gt;= 2;</span>
+<span class="nc" id="L250">            dest[2] = UPPER_HEX_DIGITS[cp];</span>
+<span class="nc" id="L251">            return dest;</span>
+<span class="nc bnc" id="L252" title="All 2 branches missed.">        } else if (cp &lt;= 0x10ffff) {</span>
+<span class="nc" id="L253">            char[] dest = new char[12];</span>
+            // Four byte UTF-8 characters [cp &gt;= 0xffff &amp;&amp; cp &lt;= 0x10ffff]
+            // Start with &quot;%F-%--%--%--&quot; and fill in the blanks
+<span class="nc" id="L256">            dest[0] = '%';</span>
+<span class="nc" id="L257">            dest[1] = 'F';</span>
+<span class="nc" id="L258">            dest[3] = '%';</span>
+<span class="nc" id="L259">            dest[6] = '%';</span>
+<span class="nc" id="L260">            dest[9] = '%';</span>
+<span class="nc" id="L261">            dest[11] = UPPER_HEX_DIGITS[cp &amp; 0xF];</span>
+<span class="nc" id="L262">            cp &gt;&gt;&gt;= 4;</span>
+<span class="nc" id="L263">            dest[10] = UPPER_HEX_DIGITS[0x8 | (cp &amp; 0x3)];</span>
+<span class="nc" id="L264">            cp &gt;&gt;&gt;= 2;</span>
+<span class="nc" id="L265">            dest[8] = UPPER_HEX_DIGITS[cp &amp; 0xF];</span>
+<span class="nc" id="L266">            cp &gt;&gt;&gt;= 4;</span>
+<span class="nc" id="L267">            dest[7] = UPPER_HEX_DIGITS[0x8 | (cp &amp; 0x3)];</span>
+<span class="nc" id="L268">            cp &gt;&gt;&gt;= 2;</span>
+<span class="nc" id="L269">            dest[5] = UPPER_HEX_DIGITS[cp &amp; 0xF];</span>
+<span class="nc" id="L270">            cp &gt;&gt;&gt;= 4;</span>
+<span class="nc" id="L271">            dest[4] = UPPER_HEX_DIGITS[0x8 | (cp &amp; 0x3)];</span>
+<span class="nc" id="L272">            cp &gt;&gt;&gt;= 2;</span>
+<span class="nc" id="L273">            dest[2] = UPPER_HEX_DIGITS[cp &amp; 0x7];</span>
+<span class="nc" id="L274">            return dest;</span>
+        } else {
+            // If this ever happens it is due to bug in UnicodeEscaper, not bad
+            // input.
+<span class="nc" id="L278">            throw new IllegalArgumentException(&quot;Invalid unicode character value &quot; + cp);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

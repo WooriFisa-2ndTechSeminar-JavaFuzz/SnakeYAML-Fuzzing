@@ -1,0 +1,1681 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Emitter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.emitter</a> &gt; <span class="el_source">Emitter.java</span></div><h1>Emitter.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.emitter;
+
+import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.DumperOptions.ScalarStyle;
+import org.yaml.snakeyaml.DumperOptions.Version;
+import org.yaml.snakeyaml.comments.CommentEventsCollector;
+import org.yaml.snakeyaml.comments.CommentLine;
+import org.yaml.snakeyaml.comments.CommentType;
+import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.events.AliasEvent;
+import org.yaml.snakeyaml.events.CollectionEndEvent;
+import org.yaml.snakeyaml.events.CollectionStartEvent;
+import org.yaml.snakeyaml.events.CommentEvent;
+import org.yaml.snakeyaml.events.DocumentEndEvent;
+import org.yaml.snakeyaml.events.DocumentStartEvent;
+import org.yaml.snakeyaml.events.Event;
+import org.yaml.snakeyaml.events.Event.ID;
+import org.yaml.snakeyaml.events.MappingEndEvent;
+import org.yaml.snakeyaml.events.MappingStartEvent;
+import org.yaml.snakeyaml.events.NodeEvent;
+import org.yaml.snakeyaml.events.ScalarEvent;
+import org.yaml.snakeyaml.events.SequenceEndEvent;
+import org.yaml.snakeyaml.events.SequenceStartEvent;
+import org.yaml.snakeyaml.events.StreamEndEvent;
+import org.yaml.snakeyaml.events.StreamStartEvent;
+import org.yaml.snakeyaml.nodes.Tag;
+import org.yaml.snakeyaml.reader.StreamReader;
+import org.yaml.snakeyaml.scanner.Constant;
+import org.yaml.snakeyaml.util.ArrayStack;
+
+import java.io.IOException;
+import java.io.Writer;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * &lt;pre&gt;
+ * Emitter expects events obeying the following grammar:
+ * stream ::= STREAM-START document* STREAM-END
+ * document ::= DOCUMENT-START node DOCUMENT-END
+ * node ::= SCALAR | sequence | mapping
+ * sequence ::= SEQUENCE-START node* SEQUENCE-END
+ * mapping ::= MAPPING-START (node node)* MAPPING-END
+ * &lt;/pre&gt;
+ */
+public final class Emitter implements Emitable {
+    public static final int MIN_INDENT = 1;
+    public static final int MAX_INDENT = 10;
+<span class="nc" id="L74">    private static final char[] SPACE = {' '};</span>
+
+<span class="nc" id="L76">    private static final Pattern SPACES_PATTERN = Pattern.compile(&quot;\\s&quot;);</span>
+<span class="nc" id="L77">    private static final Set&lt;Character&gt; INVALID_ANCHOR = new HashSet();</span>
+    static {
+<span class="nc" id="L79">        INVALID_ANCHOR.add('[');</span>
+<span class="nc" id="L80">        INVALID_ANCHOR.add(']');</span>
+<span class="nc" id="L81">        INVALID_ANCHOR.add('{');</span>
+<span class="nc" id="L82">        INVALID_ANCHOR.add('}');</span>
+<span class="nc" id="L83">        INVALID_ANCHOR.add(',');</span>
+<span class="nc" id="L84">        INVALID_ANCHOR.add('*');</span>
+<span class="nc" id="L85">        INVALID_ANCHOR.add('&amp;');</span>
+    }
+
+<span class="nc" id="L88">    private static final Map&lt;Character, String&gt; ESCAPE_REPLACEMENTS = new HashMap&lt;Character, String&gt;();</span>
+    static {
+<span class="nc" id="L90">        ESCAPE_REPLACEMENTS.put('\0', &quot;0&quot;);</span>
+<span class="nc" id="L91">        ESCAPE_REPLACEMENTS.put('\u0007', &quot;a&quot;);</span>
+<span class="nc" id="L92">        ESCAPE_REPLACEMENTS.put('\u0008', &quot;b&quot;);</span>
+<span class="nc" id="L93">        ESCAPE_REPLACEMENTS.put('\u0009', &quot;t&quot;);</span>
+<span class="nc" id="L94">        ESCAPE_REPLACEMENTS.put('\n', &quot;n&quot;);</span>
+<span class="nc" id="L95">        ESCAPE_REPLACEMENTS.put('\u000B', &quot;v&quot;);</span>
+<span class="nc" id="L96">        ESCAPE_REPLACEMENTS.put('\u000C', &quot;f&quot;);</span>
+<span class="nc" id="L97">        ESCAPE_REPLACEMENTS.put('\r', &quot;r&quot;);</span>
+<span class="nc" id="L98">        ESCAPE_REPLACEMENTS.put('\u001B', &quot;e&quot;);</span>
+<span class="nc" id="L99">        ESCAPE_REPLACEMENTS.put('&quot;', &quot;\&quot;&quot;);</span>
+<span class="nc" id="L100">        ESCAPE_REPLACEMENTS.put('\\', &quot;\\&quot;);</span>
+<span class="nc" id="L101">        ESCAPE_REPLACEMENTS.put('\u0085', &quot;N&quot;);</span>
+<span class="nc" id="L102">        ESCAPE_REPLACEMENTS.put('\u00A0', &quot;_&quot;);</span>
+<span class="nc" id="L103">        ESCAPE_REPLACEMENTS.put('\u2028', &quot;L&quot;);</span>
+<span class="nc" id="L104">        ESCAPE_REPLACEMENTS.put('\u2029', &quot;P&quot;);</span>
+    }
+
+<span class="nc" id="L107">    private final static Map&lt;String, String&gt; DEFAULT_TAG_PREFIXES = new LinkedHashMap&lt;String, String&gt;();</span>
+    static {
+<span class="nc" id="L109">        DEFAULT_TAG_PREFIXES.put(&quot;!&quot;, &quot;!&quot;);</span>
+<span class="nc" id="L110">        DEFAULT_TAG_PREFIXES.put(Tag.PREFIX, &quot;!!&quot;);</span>
+    }
+    // The stream should have the methods `write` and possibly `flush`.
+    private final Writer stream;
+
+    // Encoding is defined by Writer (cannot be overridden by STREAM-START.)
+    // private Charset encoding;
+
+    // Emitter is a state machine with a stack of states to handle nested
+    // structures.
+    private final ArrayStack&lt;EmitterState&gt; states;
+    private EmitterState state;
+
+    // Current event and the event queue.
+    private final Queue&lt;Event&gt; events;
+    private Event event;
+
+    // The current indentation level and the stack of previous indents.
+    private final ArrayStack&lt;Integer&gt; indents;
+    private Integer indent;
+
+    // Flow level.
+    private int flowLevel;
+
+    // Contexts.
+    private boolean rootContext;
+    private boolean mappingContext;
+    private boolean simpleKeyContext;
+
+    //
+    // Characteristics of the last emitted character:
+    // - current position.
+    // - is it a whitespace?
+    // - is it an indention character
+    // (indentation space, '-', '?', or ':')?
+    // private int line; this variable is not used
+    private int column;
+    private boolean whitespace;
+    private boolean indention;
+    private boolean openEnded;
+
+    // Formatting details.
+    private final Boolean canonical;
+    // pretty print flow by adding extra line breaks
+    private final Boolean prettyFlow;
+
+    private final boolean allowUnicode;
+    private int bestIndent;
+    private final int indicatorIndent;
+    private final boolean indentWithIndicator;
+    private int bestWidth;
+    private final char[] bestLineBreak;
+    private final boolean splitLines;
+    private final int maxSimpleKeyLength;
+    private final boolean emitComments;
+
+    // Tag prefixes.
+    private Map&lt;String, String&gt; tagPrefixes;
+
+    // Prepared anchor and tag.
+    private String preparedAnchor;
+    private String preparedTag;
+
+    // Scalar analysis and style.
+    private ScalarAnalysis analysis;
+    private DumperOptions.ScalarStyle style;
+    
+    // Comment processing
+    private final CommentEventsCollector blockCommentsCollector;
+    private final CommentEventsCollector inlineCommentsCollector;
+
+
+<span class="nc" id="L182">    public Emitter(Writer stream, DumperOptions opts) {</span>
+        // The stream should have the methods `write` and possibly `flush`.
+<span class="nc" id="L184">        this.stream = stream;</span>
+        // Emitter is a state machine with a stack of states to handle nested
+        // structures.
+<span class="nc" id="L187">        this.states = new ArrayStack&lt;EmitterState&gt;(100);</span>
+<span class="nc" id="L188">        this.state = new ExpectStreamStart();</span>
+        // Current event and the event queue.
+<span class="nc" id="L190">        this.events = new ArrayBlockingQueue&lt;Event&gt;(100);</span>
+<span class="nc" id="L191">        this.event = null;</span>
+        // The current indentation level and the stack of previous indents.
+<span class="nc" id="L193">        this.indents = new ArrayStack&lt;Integer&gt;(10);</span>
+<span class="nc" id="L194">        this.indent = null;</span>
+        // Flow level.
+<span class="nc" id="L196">        this.flowLevel = 0;</span>
+        // Contexts.
+<span class="nc" id="L198">        mappingContext = false;</span>
+<span class="nc" id="L199">        simpleKeyContext = false;</span>
+
+        //
+        // Characteristics of the last emitted character:
+        // - current position.
+        // - is it a whitespace?
+        // - is it an indention character
+        // (indentation space, '-', '?', or ':')?
+<span class="nc" id="L207">        column = 0;</span>
+<span class="nc" id="L208">        whitespace = true;</span>
+<span class="nc" id="L209">        indention = true;</span>
+
+        // Whether the document requires an explicit document indicator
+<span class="nc" id="L212">        openEnded = false;</span>
+
+        // Formatting details.
+<span class="nc" id="L215">        this.canonical = opts.isCanonical();</span>
+<span class="nc" id="L216">        this.prettyFlow = opts.isPrettyFlow();</span>
+<span class="nc" id="L217">        this.allowUnicode = opts.isAllowUnicode();</span>
+<span class="nc" id="L218">        this.bestIndent = 2;</span>
+<span class="nc bnc" id="L219" title="All 4 branches missed.">        if ((opts.getIndent() &gt; MIN_INDENT) &amp;&amp; (opts.getIndent() &lt; MAX_INDENT)) {</span>
+<span class="nc" id="L220">            this.bestIndent = opts.getIndent();</span>
+        }
+<span class="nc" id="L222">        this.indicatorIndent = opts.getIndicatorIndent();</span>
+<span class="nc" id="L223">        this.indentWithIndicator = opts.getIndentWithIndicator();</span>
+<span class="nc" id="L224">        this.bestWidth = 80;</span>
+<span class="nc bnc" id="L225" title="All 2 branches missed.">        if (opts.getWidth() &gt; this.bestIndent * 2) {</span>
+<span class="nc" id="L226">            this.bestWidth = opts.getWidth();</span>
+        }
+<span class="nc" id="L228">        this.bestLineBreak = opts.getLineBreak().getString().toCharArray();</span>
+<span class="nc" id="L229">        this.splitLines = opts.getSplitLines();</span>
+<span class="nc" id="L230">        this.maxSimpleKeyLength = opts.getMaxSimpleKeyLength();</span>
+<span class="nc" id="L231">        this.emitComments = opts.isProcessComments();</span>
+
+        // Tag prefixes.
+<span class="nc" id="L234">        this.tagPrefixes = new LinkedHashMap&lt;String, String&gt;();</span>
+
+        // Prepared anchor and tag.
+<span class="nc" id="L237">        this.preparedAnchor = null;</span>
+<span class="nc" id="L238">        this.preparedTag = null;</span>
+
+        // Scalar analysis and style.
+<span class="nc" id="L241">        this.analysis = null;</span>
+<span class="nc" id="L242">        this.style = null;</span>
+        
+        // Comment processing
+<span class="nc" id="L245">        this.blockCommentsCollector = new CommentEventsCollector(events,</span>
+<span class="nc" id="L246">                CommentType.BLANK_LINE, CommentType.BLOCK);</span>
+<span class="nc" id="L247">        this.inlineCommentsCollector = new CommentEventsCollector(events,</span>
+<span class="nc" id="L248">                CommentType.IN_LINE);</span>
+<span class="nc" id="L249">    }</span>
+
+    public void emit(Event event) throws IOException {
+<span class="nc" id="L252">        this.events.add(event);</span>
+<span class="nc bnc" id="L253" title="All 2 branches missed.">        while (!needMoreEvents()) {</span>
+<span class="nc" id="L254">            this.event = this.events.poll();</span>
+<span class="nc" id="L255">            this.state.expect();</span>
+<span class="nc" id="L256">            this.event = null;</span>
+        }
+<span class="nc" id="L258">    }</span>
+
+    // In some cases, we wait for a few next events before emitting.
+
+    private boolean needMoreEvents() {
+<span class="nc bnc" id="L263" title="All 2 branches missed.">        if (events.isEmpty()) {</span>
+<span class="nc" id="L264">            return true;</span>
+        }
+
+<span class="nc" id="L267">        Iterator&lt;Event&gt; iter = events.iterator();</span>
+<span class="nc" id="L268">        Event event = iter.next(); // FIXME why without check ???</span>
+<span class="nc bnc" id="L269" title="All 2 branches missed.">        while(event instanceof CommentEvent) {</span>
+<span class="nc bnc" id="L270" title="All 2 branches missed.">            if (!iter.hasNext()) {</span>
+<span class="nc" id="L271">                return true;</span>
+            }
+<span class="nc" id="L273">            event = iter.next();</span>
+        }
+
+<span class="nc bnc" id="L276" title="All 2 branches missed.">        if (event instanceof DocumentStartEvent) {</span>
+<span class="nc" id="L277">            return needEvents(iter, 1);</span>
+<span class="nc bnc" id="L278" title="All 2 branches missed.">        } else if (event instanceof SequenceStartEvent) {</span>
+<span class="nc" id="L279">            return needEvents(iter, 2);</span>
+<span class="nc bnc" id="L280" title="All 2 branches missed.">        } else if (event instanceof MappingStartEvent) {</span>
+<span class="nc" id="L281">            return needEvents(iter, 3);</span>
+<span class="nc bnc" id="L282" title="All 2 branches missed.">        } else if (event instanceof StreamStartEvent) {</span>
+<span class="nc" id="L283">            return needEvents(iter, 2);</span>
+<span class="nc bnc" id="L284" title="All 2 branches missed.">        } else if (event instanceof StreamEndEvent) {</span>
+<span class="nc" id="L285">            return false;</span>
+<span class="nc bnc" id="L286" title="All 2 branches missed.">        } else if (emitComments) {</span>
+<span class="nc" id="L287">            return needEvents(iter, 1);</span>
+        }
+<span class="nc" id="L289">        return false;</span>
+    }
+    
+    private boolean needEvents(Iterator&lt;Event&gt; iter, int count) {
+<span class="nc" id="L293">        int level = 0;</span>
+<span class="nc" id="L294">        int actualCount = 0;</span>
+<span class="nc bnc" id="L295" title="All 2 branches missed.">        while (iter.hasNext()) {</span>
+<span class="nc" id="L296">            Event event = iter.next();</span>
+<span class="nc bnc" id="L297" title="All 2 branches missed.">            if (event instanceof CommentEvent) {</span>
+<span class="nc" id="L298">                continue;</span>
+            }
+<span class="nc" id="L300">            actualCount++;</span>
+<span class="nc bnc" id="L301" title="All 4 branches missed.">            if (event instanceof DocumentStartEvent || event instanceof CollectionStartEvent) {</span>
+<span class="nc" id="L302">                level++;</span>
+<span class="nc bnc" id="L303" title="All 4 branches missed.">            } else if (event instanceof DocumentEndEvent || event instanceof CollectionEndEvent) {</span>
+<span class="nc" id="L304">                level--;</span>
+<span class="nc bnc" id="L305" title="All 2 branches missed.">            } else if (event instanceof StreamEndEvent) {</span>
+<span class="nc" id="L306">                level = -1;</span>
+            }
+<span class="nc bnc" id="L308" title="All 2 branches missed.">            if (level &lt; 0) {</span>
+<span class="nc" id="L309">                return false;</span>
+            }
+        }
+<span class="nc bnc" id="L312" title="All 2 branches missed.">        return actualCount &lt; count;</span>
+    }
+
+    private void increaseIndent(boolean flow, boolean indentless) {
+<span class="nc" id="L316">        indents.push(indent);</span>
+<span class="nc bnc" id="L317" title="All 2 branches missed.">        if (indent == null) {</span>
+<span class="nc bnc" id="L318" title="All 2 branches missed.">            if (flow) {</span>
+<span class="nc" id="L319">                indent = bestIndent;</span>
+<span class="nc" id="L320">            } else {</span>
+<span class="nc" id="L321">                indent = 0;</span>
+            }
+<span class="nc bnc" id="L323" title="All 2 branches missed.">        } else if (!indentless) {</span>
+<span class="nc" id="L324">            this.indent += bestIndent;</span>
+        }
+<span class="nc" id="L326">    }</span>
+
+    // States
+
+    // Stream handlers.
+
+<span class="nc" id="L332">    private class ExpectStreamStart implements EmitterState {</span>
+        public void expect() throws IOException {
+<span class="nc bnc" id="L334" title="All 2 branches missed.">            if (event instanceof StreamStartEvent) {</span>
+<span class="nc" id="L335">                writeStreamStart();</span>
+<span class="nc" id="L336">                state = new ExpectFirstDocumentStart();</span>
+<span class="nc" id="L337">            } else {</span>
+<span class="nc" id="L338">                throw new EmitterException(&quot;expected StreamStartEvent, but got &quot; + event);</span>
+            }
+<span class="nc" id="L340">        }</span>
+    }
+
+<span class="nc" id="L343">    private class ExpectNothing implements EmitterState {</span>
+        public void expect() throws IOException {
+<span class="nc" id="L345">            throw new EmitterException(&quot;expecting nothing, but got &quot; + event);</span>
+        }
+    }
+
+    // Document handlers.
+
+<span class="nc" id="L351">    private class ExpectFirstDocumentStart implements EmitterState {</span>
+        public void expect() throws IOException {
+<span class="nc" id="L353">            new ExpectDocumentStart(true).expect();</span>
+<span class="nc" id="L354">        }</span>
+    }
+
+    private class ExpectDocumentStart implements EmitterState {
+        private final boolean first;
+
+<span class="nc" id="L360">        public ExpectDocumentStart(boolean first) {</span>
+<span class="nc" id="L361">            this.first = first;</span>
+<span class="nc" id="L362">        }</span>
+
+        public void expect() throws IOException {
+<span class="nc bnc" id="L365" title="All 2 branches missed.">            if (event instanceof DocumentStartEvent) {</span>
+<span class="nc" id="L366">                DocumentStartEvent ev = (DocumentStartEvent) event;</span>
+<span class="nc bnc" id="L367" title="All 6 branches missed.">                if ((ev.getVersion() != null || ev.getTags() != null) &amp;&amp; openEnded) {</span>
+<span class="nc" id="L368">                    writeIndicator(&quot;...&quot;, true, false, false);</span>
+<span class="nc" id="L369">                    writeIndent();</span>
+                }
+<span class="nc bnc" id="L371" title="All 2 branches missed.">                if (ev.getVersion() != null) {</span>
+<span class="nc" id="L372">                    String versionText = prepareVersion(ev.getVersion());</span>
+<span class="nc" id="L373">                    writeVersionDirective(versionText);</span>
+                }
+<span class="nc" id="L375">                tagPrefixes = new LinkedHashMap&lt;String, String&gt;(DEFAULT_TAG_PREFIXES);</span>
+<span class="nc bnc" id="L376" title="All 2 branches missed.">                if (ev.getTags() != null) {</span>
+<span class="nc" id="L377">                    Set&lt;String&gt; handles = new TreeSet&lt;String&gt;(ev.getTags().keySet());</span>
+<span class="nc bnc" id="L378" title="All 2 branches missed.">                    for (String handle : handles) {</span>
+<span class="nc" id="L379">                        String prefix = ev.getTags().get(handle);</span>
+<span class="nc" id="L380">                        tagPrefixes.put(prefix, handle);</span>
+<span class="nc" id="L381">                        String handleText = prepareTagHandle(handle);</span>
+<span class="nc" id="L382">                        String prefixText = prepareTagPrefix(prefix);</span>
+<span class="nc" id="L383">                        writeTagDirective(handleText, prefixText);</span>
+                    }
+                }
+<span class="nc bnc" id="L386" title="All 6 branches missed.">                boolean implicit = first &amp;&amp; !ev.getExplicit() &amp;&amp; !canonical</span>
+<span class="nc bnc" id="L387" title="All 2 branches missed.">                        &amp;&amp; ev.getVersion() == null</span>
+<span class="nc bnc" id="L388" title="All 4 branches missed.">                        &amp;&amp; (ev.getTags() == null || ev.getTags().isEmpty())</span>
+<span class="nc bnc" id="L389" title="All 2 branches missed.">                        &amp;&amp; !checkEmptyDocument();</span>
+<span class="nc bnc" id="L390" title="All 2 branches missed.">                if (!implicit) {</span>
+<span class="nc" id="L391">                    writeIndent();</span>
+<span class="nc" id="L392">                    writeIndicator(&quot;---&quot;, true, false, false);</span>
+<span class="nc bnc" id="L393" title="All 2 branches missed.">                    if (canonical) {</span>
+<span class="nc" id="L394">                        writeIndent();</span>
+                    }
+                }
+<span class="nc" id="L397">                state = new ExpectDocumentRoot();</span>
+<span class="nc bnc" id="L398" title="All 2 branches missed.">            } else if (event instanceof StreamEndEvent) {</span>
+<span class="nc" id="L399">                writeStreamEnd();</span>
+<span class="nc" id="L400">                state = new ExpectNothing();</span>
+<span class="nc bnc" id="L401" title="All 2 branches missed.">            } else if (event instanceof CommentEvent) {</span>
+<span class="nc" id="L402">                blockCommentsCollector.collectEvents(event);</span>
+<span class="nc" id="L403">                writeBlockComment();</span>
+                // state = state; remains unchanged
+<span class="nc" id="L405">            } else {</span>
+<span class="nc" id="L406">                throw new EmitterException(&quot;expected DocumentStartEvent, but got &quot; + event);</span>
+            }
+<span class="nc" id="L408">        }</span>
+    }
+
+<span class="nc" id="L411">    private class ExpectDocumentEnd implements EmitterState {</span>
+        public void expect() throws IOException {
+<span class="nc" id="L413">            event = blockCommentsCollector.collectEventsAndPoll(event);</span>
+<span class="nc" id="L414">            writeBlockComment();</span>
+<span class="nc bnc" id="L415" title="All 2 branches missed.">            if (event instanceof DocumentEndEvent) {</span>
+<span class="nc" id="L416">                writeIndent();</span>
+<span class="nc bnc" id="L417" title="All 2 branches missed.">                if (((DocumentEndEvent) event).getExplicit()) {</span>
+<span class="nc" id="L418">                    writeIndicator(&quot;...&quot;, true, false, false);</span>
+<span class="nc" id="L419">                    writeIndent();</span>
+                }
+<span class="nc" id="L421">                flushStream();</span>
+<span class="nc" id="L422">                state = new ExpectDocumentStart(false);</span>
+<span class="nc" id="L423">            } else {</span>
+<span class="nc" id="L424">                throw new EmitterException(&quot;expected DocumentEndEvent, but got &quot; + event);</span>
+            }
+<span class="nc" id="L426">        }</span>
+    }
+
+<span class="nc" id="L429">    private class ExpectDocumentRoot implements EmitterState {</span>
+        public void expect() throws IOException {
+<span class="nc" id="L431">            event = blockCommentsCollector.collectEventsAndPoll(event);</span>
+<span class="nc bnc" id="L432" title="All 2 branches missed.">            if (!blockCommentsCollector.isEmpty()) {</span>
+<span class="nc" id="L433">                writeBlockComment();</span>
+<span class="nc bnc" id="L434" title="All 2 branches missed.">                if (event instanceof DocumentEndEvent) {</span>
+<span class="nc" id="L435">                    new ExpectDocumentEnd().expect();</span>
+<span class="nc" id="L436">                    return;</span>
+                }
+            }
+<span class="nc" id="L439">            states.push(new ExpectDocumentEnd());</span>
+<span class="nc" id="L440">            expectNode(true, false, false);</span>
+<span class="nc" id="L441">        }</span>
+    }
+
+    // Node handlers.
+
+    private void expectNode(boolean root, boolean mapping, boolean simpleKey) throws IOException {
+<span class="nc" id="L447">        rootContext = root;</span>
+<span class="nc" id="L448">        mappingContext = mapping;</span>
+<span class="nc" id="L449">        simpleKeyContext = simpleKey;</span>
+<span class="nc bnc" id="L450" title="All 2 branches missed.">        if (event instanceof AliasEvent) {</span>
+<span class="nc" id="L451">            expectAlias();</span>
+<span class="nc bnc" id="L452" title="All 4 branches missed.">        } else if (event instanceof ScalarEvent || event instanceof CollectionStartEvent) {</span>
+<span class="nc" id="L453">            processAnchor(&quot;&amp;&quot;);</span>
+<span class="nc" id="L454">            processTag();</span>
+<span class="nc bnc" id="L455" title="All 2 branches missed.">            if (event instanceof ScalarEvent) {</span>
+<span class="nc" id="L456">                expectScalar();</span>
+<span class="nc bnc" id="L457" title="All 2 branches missed.">            } else if (event instanceof SequenceStartEvent) {</span>
+<span class="nc bnc" id="L458" title="All 6 branches missed.">                if (flowLevel != 0 || canonical || ((SequenceStartEvent) event).isFlow()</span>
+<span class="nc bnc" id="L459" title="All 2 branches missed.">                        || checkEmptySequence()) {</span>
+<span class="nc" id="L460">                    expectFlowSequence();</span>
+<span class="nc" id="L461">                } else {</span>
+<span class="nc" id="L462">                    expectBlockSequence();</span>
+                }
+<span class="nc" id="L464">            } else {// MappingStartEvent</span>
+<span class="nc bnc" id="L465" title="All 6 branches missed.">                if (flowLevel != 0 || canonical || ((MappingStartEvent) event).isFlow()</span>
+<span class="nc bnc" id="L466" title="All 2 branches missed.">                        || checkEmptyMapping()) {</span>
+<span class="nc" id="L467">                    expectFlowMapping();</span>
+<span class="nc" id="L468">                } else {</span>
+<span class="nc" id="L469">                    expectBlockMapping();</span>
+                }
+            }
+<span class="nc" id="L472">        } else {</span>
+<span class="nc" id="L473">            throw new EmitterException(&quot;expected NodeEvent, but got &quot; + event);</span>
+        }
+<span class="nc" id="L475">    }</span>
+
+    private void expectAlias() throws IOException {
+<span class="nc bnc" id="L478" title="All 2 branches missed.">        if (!(event instanceof AliasEvent)) {</span>
+<span class="nc" id="L479">            throw new EmitterException(&quot;Alias must be provided&quot;);</span>
+        }
+<span class="nc" id="L481">        processAnchor(&quot;*&quot;);</span>
+<span class="nc" id="L482">        state = states.pop();</span>
+<span class="nc" id="L483">    }</span>
+
+    private void expectScalar() throws IOException {
+<span class="nc" id="L486">        increaseIndent(true, false);</span>
+<span class="nc" id="L487">        processScalar();</span>
+<span class="nc" id="L488">        indent = indents.pop();</span>
+<span class="nc" id="L489">        state = states.pop();</span>
+<span class="nc" id="L490">    }</span>
+
+    // Flow sequence handlers.
+
+    private void expectFlowSequence() throws IOException {
+<span class="nc" id="L495">        writeIndicator(&quot;[&quot;, true, true, false);</span>
+<span class="nc" id="L496">        flowLevel++;</span>
+<span class="nc" id="L497">        increaseIndent(true, false);</span>
+<span class="nc bnc" id="L498" title="All 2 branches missed.">        if (prettyFlow) {</span>
+<span class="nc" id="L499">            writeIndent();</span>
+        }
+<span class="nc" id="L501">        state = new ExpectFirstFlowSequenceItem();</span>
+<span class="nc" id="L502">    }</span>
+
+<span class="nc" id="L504">    private class ExpectFirstFlowSequenceItem implements EmitterState {</span>
+        public void expect() throws IOException {
+<span class="nc bnc" id="L506" title="All 2 branches missed.">            if (event instanceof SequenceEndEvent) {</span>
+<span class="nc" id="L507">                indent = indents.pop();</span>
+<span class="nc" id="L508">                flowLevel--;</span>
+<span class="nc" id="L509">                writeIndicator(&quot;]&quot;, false, false, false);</span>
+<span class="nc" id="L510">                inlineCommentsCollector.collectEvents();</span>
+<span class="nc" id="L511">                writeInlineComments();</span>
+<span class="nc" id="L512">                state = states.pop();</span>
+<span class="nc bnc" id="L513" title="All 2 branches missed.">            } else if (event instanceof CommentEvent) {</span>
+<span class="nc" id="L514">                blockCommentsCollector.collectEvents(event);</span>
+<span class="nc" id="L515">                writeBlockComment();</span>
+<span class="nc" id="L516">            } else {</span>
+<span class="nc bnc" id="L517" title="All 8 branches missed.">                if (canonical || (column &gt; bestWidth &amp;&amp; splitLines) || prettyFlow) {</span>
+<span class="nc" id="L518">                    writeIndent();</span>
+                }
+<span class="nc" id="L520">                states.push(new ExpectFlowSequenceItem());</span>
+<span class="nc" id="L521">                expectNode(false, false, false);</span>
+<span class="nc" id="L522">                event = inlineCommentsCollector.collectEvents(event);</span>
+<span class="nc" id="L523">                writeInlineComments();</span>
+            }
+<span class="nc" id="L525">        }</span>
+    }
+
+<span class="nc" id="L528">    private class ExpectFlowSequenceItem implements EmitterState {</span>
+        public void expect() throws IOException {
+<span class="nc bnc" id="L530" title="All 2 branches missed.">            if (event instanceof SequenceEndEvent) {</span>
+<span class="nc" id="L531">                indent = indents.pop();</span>
+<span class="nc" id="L532">                flowLevel--;</span>
+<span class="nc bnc" id="L533" title="All 2 branches missed.">                if (canonical) {</span>
+<span class="nc" id="L534">                    writeIndicator(&quot;,&quot;, false, false, false);</span>
+<span class="nc" id="L535">                    writeIndent();</span>
+<span class="nc bnc" id="L536" title="All 2 branches missed.">                } else if (prettyFlow) {</span>
+<span class="nc" id="L537">                    writeIndent();</span>
+                }
+<span class="nc" id="L539">                writeIndicator(&quot;]&quot;, false, false, false);</span>
+<span class="nc" id="L540">                inlineCommentsCollector.collectEvents();</span>
+<span class="nc" id="L541">                writeInlineComments();</span>
+<span class="nc bnc" id="L542" title="All 2 branches missed.">                if (prettyFlow) {</span>
+<span class="nc" id="L543">                    writeIndent();</span>
+                }
+<span class="nc" id="L545">                state = states.pop();</span>
+<span class="nc bnc" id="L546" title="All 2 branches missed.">            } else if (event instanceof CommentEvent) {</span>
+<span class="nc" id="L547">                event = blockCommentsCollector.collectEvents(event);</span>
+<span class="nc" id="L548">            } else {</span>
+<span class="nc" id="L549">                writeIndicator(&quot;,&quot;, false, false, false);</span>
+<span class="nc" id="L550">                writeBlockComment();</span>
+<span class="nc bnc" id="L551" title="All 8 branches missed.">                if (canonical || (column &gt; bestWidth &amp;&amp; splitLines) || prettyFlow) {</span>
+<span class="nc" id="L552">                    writeIndent();</span>
+                }
+<span class="nc" id="L554">                states.push(new ExpectFlowSequenceItem());</span>
+<span class="nc" id="L555">                expectNode(false, false, false);</span>
+<span class="nc" id="L556">                event = inlineCommentsCollector.collectEvents(event);</span>
+<span class="nc" id="L557">                writeInlineComments();</span>
+            }
+<span class="nc" id="L559">        }</span>
+    }
+
+    // Flow mapping handlers.
+
+    private void expectFlowMapping() throws IOException {
+<span class="nc" id="L565">        writeIndicator(&quot;{&quot;, true, true, false);</span>
+<span class="nc" id="L566">        flowLevel++;</span>
+<span class="nc" id="L567">        increaseIndent(true, false);</span>
+<span class="nc bnc" id="L568" title="All 2 branches missed.">        if (prettyFlow) {</span>
+<span class="nc" id="L569">            writeIndent();</span>
+        }
+<span class="nc" id="L571">        state = new ExpectFirstFlowMappingKey();</span>
+<span class="nc" id="L572">    }</span>
+
+<span class="nc" id="L574">    private class ExpectFirstFlowMappingKey implements EmitterState {</span>
+        public void expect() throws IOException {
+<span class="nc" id="L576">            event = blockCommentsCollector.collectEventsAndPoll(event);</span>
+<span class="nc" id="L577">            writeBlockComment();</span>
+<span class="nc bnc" id="L578" title="All 2 branches missed.">            if (event instanceof MappingEndEvent) {</span>
+<span class="nc" id="L579">                indent = indents.pop();</span>
+<span class="nc" id="L580">                flowLevel--;</span>
+<span class="nc" id="L581">                writeIndicator(&quot;}&quot;, false, false, false);</span>
+<span class="nc" id="L582">                inlineCommentsCollector.collectEvents();</span>
+<span class="nc" id="L583">                writeInlineComments();</span>
+<span class="nc" id="L584">                state = states.pop();</span>
+<span class="nc" id="L585">            } else {</span>
+<span class="nc bnc" id="L586" title="All 8 branches missed.">                if (canonical || (column &gt; bestWidth &amp;&amp; splitLines) || prettyFlow) {</span>
+<span class="nc" id="L587">                    writeIndent();</span>
+                }
+<span class="nc bnc" id="L589" title="All 4 branches missed.">                if (!canonical &amp;&amp; checkSimpleKey()) {</span>
+<span class="nc" id="L590">                    states.push(new ExpectFlowMappingSimpleValue());</span>
+<span class="nc" id="L591">                    expectNode(false, true, true);</span>
+<span class="nc" id="L592">                } else {</span>
+<span class="nc" id="L593">                    writeIndicator(&quot;?&quot;, true, false, false);</span>
+<span class="nc" id="L594">                    states.push(new ExpectFlowMappingValue());</span>
+<span class="nc" id="L595">                    expectNode(false, true, false);</span>
+                }
+            }
+<span class="nc" id="L598">        }</span>
+    }
+
+<span class="nc" id="L601">    private class ExpectFlowMappingKey implements EmitterState {</span>
+        public void expect() throws IOException {
+<span class="nc bnc" id="L603" title="All 2 branches missed.">            if (event instanceof MappingEndEvent) {</span>
+<span class="nc" id="L604">                indent = indents.pop();</span>
+<span class="nc" id="L605">                flowLevel--;</span>
+<span class="nc bnc" id="L606" title="All 2 branches missed.">                if (canonical) {</span>
+<span class="nc" id="L607">                    writeIndicator(&quot;,&quot;, false, false, false);</span>
+<span class="nc" id="L608">                    writeIndent();</span>
+                }
+<span class="nc bnc" id="L610" title="All 2 branches missed.">                if (prettyFlow) {</span>
+<span class="nc" id="L611">                    writeIndent();</span>
+                }
+<span class="nc" id="L613">                writeIndicator(&quot;}&quot;, false, false, false);</span>
+<span class="nc" id="L614">                inlineCommentsCollector.collectEvents();</span>
+<span class="nc" id="L615">                writeInlineComments();</span>
+<span class="nc" id="L616">                state = states.pop();</span>
+<span class="nc" id="L617">            } else {</span>
+<span class="nc" id="L618">                writeIndicator(&quot;,&quot;, false, false, false);</span>
+<span class="nc" id="L619">                event = blockCommentsCollector.collectEventsAndPoll(event);</span>
+<span class="nc" id="L620">                writeBlockComment();</span>
+<span class="nc bnc" id="L621" title="All 8 branches missed.">                if (canonical || (column &gt; bestWidth &amp;&amp; splitLines) || prettyFlow) {</span>
+<span class="nc" id="L622">                    writeIndent();</span>
+                }
+<span class="nc bnc" id="L624" title="All 4 branches missed.">                if (!canonical &amp;&amp; checkSimpleKey()) {</span>
+<span class="nc" id="L625">                    states.push(new ExpectFlowMappingSimpleValue());</span>
+<span class="nc" id="L626">                    expectNode(false, true, true);</span>
+<span class="nc" id="L627">                } else {</span>
+<span class="nc" id="L628">                    writeIndicator(&quot;?&quot;, true, false, false);</span>
+<span class="nc" id="L629">                    states.push(new ExpectFlowMappingValue());</span>
+<span class="nc" id="L630">                    expectNode(false, true, false);</span>
+                }
+            }
+<span class="nc" id="L633">        }</span>
+    }
+
+<span class="nc" id="L636">    private class ExpectFlowMappingSimpleValue implements EmitterState {</span>
+        public void expect() throws IOException {
+<span class="nc" id="L638">            writeIndicator(&quot;:&quot;, false, false, false);</span>
+<span class="nc" id="L639">            event = inlineCommentsCollector.collectEventsAndPoll(event);</span>
+<span class="nc" id="L640">            writeInlineComments();</span>
+<span class="nc" id="L641">            states.push(new ExpectFlowMappingKey());</span>
+<span class="nc" id="L642">            expectNode(false, true, false);</span>
+<span class="nc" id="L643">            inlineCommentsCollector.collectEvents(event);</span>
+<span class="nc" id="L644">            writeInlineComments();</span>
+<span class="nc" id="L645">        }</span>
+    }
+
+<span class="nc" id="L648">    private class ExpectFlowMappingValue implements EmitterState {</span>
+        public void expect() throws IOException {
+<span class="nc bnc" id="L650" title="All 6 branches missed.">            if (canonical || (column &gt; bestWidth) || prettyFlow) {</span>
+<span class="nc" id="L651">                writeIndent();</span>
+            }
+<span class="nc" id="L653">            writeIndicator(&quot;:&quot;, true, false, false);</span>
+<span class="nc" id="L654">            event = inlineCommentsCollector.collectEventsAndPoll(event);</span>
+<span class="nc" id="L655">            writeInlineComments();</span>
+<span class="nc" id="L656">            states.push(new ExpectFlowMappingKey());</span>
+<span class="nc" id="L657">            expectNode(false, true, false);</span>
+<span class="nc" id="L658">            inlineCommentsCollector.collectEvents(event);</span>
+<span class="nc" id="L659">            writeInlineComments();</span>
+<span class="nc" id="L660">        }</span>
+    }
+
+    // Block sequence handlers.
+
+    private void expectBlockSequence() throws IOException {
+<span class="nc bnc" id="L666" title="All 4 branches missed.">        boolean indentless = mappingContext &amp;&amp; !indention;</span>
+<span class="nc" id="L667">        increaseIndent(false, indentless);</span>
+<span class="nc" id="L668">        state = new ExpectFirstBlockSequenceItem();</span>
+<span class="nc" id="L669">    }</span>
+
+<span class="nc" id="L671">    private class ExpectFirstBlockSequenceItem implements EmitterState {</span>
+        public void expect() throws IOException {
+<span class="nc" id="L673">            new ExpectBlockSequenceItem(true).expect();</span>
+<span class="nc" id="L674">        }</span>
+    }
+
+    private class ExpectBlockSequenceItem implements EmitterState {
+        private final boolean first;
+
+<span class="nc" id="L680">        public ExpectBlockSequenceItem(boolean first) {</span>
+<span class="nc" id="L681">            this.first = first;</span>
+<span class="nc" id="L682">        }</span>
+
+        public void expect() throws IOException {
+<span class="nc bnc" id="L685" title="All 4 branches missed.">            if (!this.first &amp;&amp; event instanceof SequenceEndEvent) {</span>
+<span class="nc" id="L686">                indent = indents.pop();</span>
+<span class="nc" id="L687">                state = states.pop();</span>
+<span class="nc bnc" id="L688" title="All 2 branches missed.">            } else if( event instanceof CommentEvent) {</span>
+<span class="nc" id="L689">                blockCommentsCollector.collectEvents(event);</span>
+<span class="nc" id="L690">            } else {</span>
+<span class="nc" id="L691">                writeIndent();</span>
+<span class="nc bnc" id="L692" title="All 4 branches missed.">                if (!indentWithIndicator || this.first) {</span>
+<span class="nc" id="L693">                    writeWhitespace(indicatorIndent);</span>
+                }
+<span class="nc" id="L695">                writeIndicator(&quot;-&quot;, true, false, true);</span>
+<span class="nc bnc" id="L696" title="All 4 branches missed.">                if (indentWithIndicator &amp;&amp; this.first) {</span>
+<span class="nc" id="L697">                    indent += indicatorIndent;</span>
+                }
+<span class="nc bnc" id="L699" title="All 2 branches missed.">                if (!blockCommentsCollector.isEmpty()) {</span>
+<span class="nc" id="L700">                    increaseIndent(false, false);</span>
+<span class="nc" id="L701">                    writeBlockComment();</span>
+<span class="nc bnc" id="L702" title="All 2 branches missed.">                    if(event instanceof ScalarEvent) {</span>
+<span class="nc" id="L703">                        analysis = analyzeScalar(((ScalarEvent)event).getValue());</span>
+<span class="nc bnc" id="L704" title="All 2 branches missed.">                        if (!analysis.isEmpty()) {</span>
+<span class="nc" id="L705">                            writeIndent();</span>
+                        }
+                    }
+<span class="nc" id="L708">                    indent = indents.pop();</span>
+                }
+<span class="nc" id="L710">                states.push(new ExpectBlockSequenceItem(false));</span>
+<span class="nc" id="L711">                expectNode(false, false, false);</span>
+<span class="nc" id="L712">                inlineCommentsCollector.collectEvents();</span>
+<span class="nc" id="L713">                writeInlineComments();</span>
+            }
+<span class="nc" id="L715">        }</span>
+    }
+
+    // Block mapping handlers.
+    private void expectBlockMapping() throws IOException {
+<span class="nc" id="L720">        increaseIndent(false, false);</span>
+<span class="nc" id="L721">        state = new ExpectFirstBlockMappingKey();</span>
+<span class="nc" id="L722">    }</span>
+
+<span class="nc" id="L724">    private class ExpectFirstBlockMappingKey implements EmitterState {</span>
+        public void expect() throws IOException {
+<span class="nc" id="L726">            new ExpectBlockMappingKey(true).expect();</span>
+<span class="nc" id="L727">        }</span>
+    }
+
+    private class ExpectBlockMappingKey implements EmitterState {
+        private final boolean first;
+
+<span class="nc" id="L733">        public ExpectBlockMappingKey(boolean first) {</span>
+<span class="nc" id="L734">            this.first = first;</span>
+<span class="nc" id="L735">        }</span>
+
+        public void expect() throws IOException {
+<span class="nc" id="L738">            event = blockCommentsCollector.collectEventsAndPoll(event);</span>
+<span class="nc" id="L739">            writeBlockComment();</span>
+<span class="nc bnc" id="L740" title="All 4 branches missed.">            if (!this.first &amp;&amp; event instanceof MappingEndEvent) {</span>
+<span class="nc" id="L741">                indent = indents.pop();</span>
+<span class="nc" id="L742">                state = states.pop();</span>
+<span class="nc" id="L743">            } else {</span>
+<span class="nc" id="L744">                writeIndent();</span>
+<span class="nc bnc" id="L745" title="All 2 branches missed.">                if (checkSimpleKey()) {</span>
+<span class="nc" id="L746">                    states.push(new ExpectBlockMappingSimpleValue());</span>
+<span class="nc" id="L747">                    expectNode(false, true, true);</span>
+<span class="nc" id="L748">                } else {</span>
+<span class="nc" id="L749">                    writeIndicator(&quot;?&quot;, true, false, true);</span>
+<span class="nc" id="L750">                    states.push(new ExpectBlockMappingValue());</span>
+<span class="nc" id="L751">                    expectNode(false, true, false);</span>
+                }
+            }
+<span class="nc" id="L754">        }</span>
+    }
+
+    private boolean isFoldedOrLiteral(Event event) {
+<span class="nc bnc" id="L758" title="All 2 branches missed.">        if(!event.is(ID.Scalar)) {</span>
+<span class="nc" id="L759">            return false;</span>
+        }
+<span class="nc" id="L761">        ScalarEvent scalarEvent = (ScalarEvent) event;</span>
+<span class="nc" id="L762">        ScalarStyle style = scalarEvent.getScalarStyle();</span>
+<span class="nc bnc" id="L763" title="All 4 branches missed.">        return style == ScalarStyle.FOLDED || style == ScalarStyle.LITERAL;</span>
+    }
+    
+<span class="nc" id="L766">    private class ExpectBlockMappingSimpleValue implements EmitterState {</span>
+        public void expect() throws IOException {
+<span class="nc" id="L768">            writeIndicator(&quot;:&quot;, false, false, false);</span>
+<span class="nc" id="L769">            event = inlineCommentsCollector.collectEventsAndPoll(event);</span>
+<span class="nc bnc" id="L770" title="All 2 branches missed.">            if(!isFoldedOrLiteral(event)) {</span>
+<span class="nc bnc" id="L771" title="All 2 branches missed.">                if(writeInlineComments()) {</span>
+<span class="nc" id="L772">                    increaseIndent(true, false);</span>
+<span class="nc" id="L773">                    writeIndent();</span>
+<span class="nc" id="L774">                    indent = indents.pop();</span>
+                }
+            }
+<span class="nc" id="L777">            event = blockCommentsCollector.collectEventsAndPoll(event);</span>
+<span class="nc bnc" id="L778" title="All 2 branches missed.">            if(!blockCommentsCollector.isEmpty()) {</span>
+<span class="nc" id="L779">                increaseIndent(true, false);</span>
+<span class="nc" id="L780">                writeBlockComment();</span>
+<span class="nc" id="L781">                writeIndent();</span>
+<span class="nc" id="L782">                indent = indents.pop();</span>
+            }
+<span class="nc" id="L784">            states.push(new ExpectBlockMappingKey(false));</span>
+<span class="nc" id="L785">            expectNode(false, true, false);</span>
+<span class="nc" id="L786">            inlineCommentsCollector.collectEvents();</span>
+<span class="nc" id="L787">            writeInlineComments();</span>
+<span class="nc" id="L788">        }</span>
+    }
+
+<span class="nc" id="L791">    private class ExpectBlockMappingValue implements EmitterState {</span>
+        public void expect() throws IOException {
+<span class="nc" id="L793">            writeIndent();</span>
+<span class="nc" id="L794">            writeIndicator(&quot;:&quot;, true, false, true);</span>
+<span class="nc" id="L795">            event = inlineCommentsCollector.collectEventsAndPoll(event);</span>
+<span class="nc" id="L796">            writeInlineComments();</span>
+<span class="nc" id="L797">            event = blockCommentsCollector.collectEventsAndPoll(event);</span>
+<span class="nc" id="L798">            writeBlockComment();</span>
+<span class="nc" id="L799">            states.push(new ExpectBlockMappingKey(false));</span>
+<span class="nc" id="L800">            expectNode(false, true, false);</span>
+<span class="nc" id="L801">            inlineCommentsCollector.collectEvents(event);</span>
+<span class="nc" id="L802">            writeInlineComments();</span>
+<span class="nc" id="L803">        }</span>
+    }
+
+    // Checkers.
+
+    private boolean checkEmptySequence() {
+<span class="nc bnc" id="L809" title="All 6 branches missed.">        return event instanceof SequenceStartEvent &amp;&amp; !events.isEmpty() &amp;&amp; events.peek() instanceof SequenceEndEvent;</span>
+    }
+
+    private boolean checkEmptyMapping() {
+<span class="nc bnc" id="L813" title="All 6 branches missed.">        return event instanceof MappingStartEvent &amp;&amp; !events.isEmpty() &amp;&amp; events.peek() instanceof MappingEndEvent;</span>
+    }
+
+    private boolean checkEmptyDocument() {
+<span class="nc bnc" id="L817" title="All 4 branches missed.">        if (!(event instanceof DocumentStartEvent) || events.isEmpty()) {</span>
+<span class="nc" id="L818">            return false;</span>
+        }
+<span class="nc" id="L820">        Event event = events.peek();</span>
+<span class="nc bnc" id="L821" title="All 2 branches missed.">        if (event instanceof ScalarEvent) {</span>
+<span class="nc" id="L822">            ScalarEvent e = (ScalarEvent) event;</span>
+<span class="nc bnc" id="L823" title="All 6 branches missed.">            return e.getAnchor() == null &amp;&amp; e.getTag() == null &amp;&amp; e.getImplicit() != null &amp;&amp; e</span>
+<span class="nc bnc" id="L824" title="All 2 branches missed.">                    .getValue().length() == 0;</span>
+        }
+<span class="nc" id="L826">        return false;</span>
+    }
+
+    private boolean checkSimpleKey() {
+<span class="nc" id="L830">        int length = 0;</span>
+<span class="nc bnc" id="L831" title="All 4 branches missed.">        if (event instanceof NodeEvent &amp;&amp; ((NodeEvent) event).getAnchor() != null) {</span>
+<span class="nc bnc" id="L832" title="All 2 branches missed.">            if (preparedAnchor == null) {</span>
+<span class="nc" id="L833">                preparedAnchor = prepareAnchor(((NodeEvent) event).getAnchor());</span>
+            }
+<span class="nc" id="L835">            length += preparedAnchor.length();</span>
+        }
+<span class="nc" id="L837">        String tag = null;</span>
+<span class="nc bnc" id="L838" title="All 2 branches missed.">        if (event instanceof ScalarEvent) {</span>
+<span class="nc" id="L839">            tag = ((ScalarEvent) event).getTag();</span>
+<span class="nc bnc" id="L840" title="All 2 branches missed.">        } else if (event instanceof CollectionStartEvent) {</span>
+<span class="nc" id="L841">            tag = ((CollectionStartEvent) event).getTag();</span>
+        }
+<span class="nc bnc" id="L843" title="All 2 branches missed.">        if (tag != null) {</span>
+<span class="nc bnc" id="L844" title="All 2 branches missed.">            if (preparedTag == null) {</span>
+<span class="nc" id="L845">                preparedTag = prepareTag(tag);</span>
+            }
+<span class="nc" id="L847">            length += preparedTag.length();</span>
+        }
+<span class="nc bnc" id="L849" title="All 2 branches missed.">        if (event instanceof ScalarEvent) {</span>
+<span class="nc bnc" id="L850" title="All 2 branches missed.">            if (analysis == null) {</span>
+<span class="nc" id="L851">                analysis = analyzeScalar(((ScalarEvent) event).getValue());</span>
+            }
+<span class="nc" id="L853">            length += analysis.getScalar().length();</span>
+        }
+<span class="nc bnc" id="L855" title="All 4 branches missed.">        return length &lt; maxSimpleKeyLength &amp;&amp; (event instanceof AliasEvent</span>
+<span class="nc bnc" id="L856" title="All 6 branches missed.">                || (event instanceof ScalarEvent &amp;&amp; !analysis.isEmpty() &amp;&amp; !analysis.isMultiline())</span>
+<span class="nc bnc" id="L857" title="All 4 branches missed.">                || checkEmptySequence() || checkEmptyMapping());</span>
+    }
+
+    // Anchor, Tag, and Scalar processors.
+
+    private void processAnchor(String indicator) throws IOException {
+<span class="nc" id="L863">        NodeEvent ev = (NodeEvent) event;</span>
+<span class="nc bnc" id="L864" title="All 2 branches missed.">        if (ev.getAnchor() == null) {</span>
+<span class="nc" id="L865">            preparedAnchor = null;</span>
+<span class="nc" id="L866">            return;</span>
+        }
+<span class="nc bnc" id="L868" title="All 2 branches missed.">        if (preparedAnchor == null) {</span>
+<span class="nc" id="L869">            preparedAnchor = prepareAnchor(ev.getAnchor());</span>
+        }
+<span class="nc" id="L871">        writeIndicator(indicator + preparedAnchor, true, false, false);</span>
+<span class="nc" id="L872">        preparedAnchor = null;</span>
+<span class="nc" id="L873">    }</span>
+
+    private void processTag() throws IOException {
+<span class="nc" id="L876">        String tag = null;</span>
+<span class="nc bnc" id="L877" title="All 2 branches missed.">        if (event instanceof ScalarEvent) {</span>
+<span class="nc" id="L878">            ScalarEvent ev = (ScalarEvent) event;</span>
+<span class="nc" id="L879">            tag = ev.getTag();</span>
+<span class="nc bnc" id="L880" title="All 2 branches missed.">            if (style == null) {</span>
+<span class="nc" id="L881">                style = chooseScalarStyle();</span>
+            }
+<span class="nc bnc" id="L883" title="All 6 branches missed.">            if ((!canonical || tag == null) &amp;&amp; ((style == null &amp;&amp; ev.getImplicit()</span>
+<span class="nc bnc" id="L884" title="All 4 branches missed.">                    .canOmitTagInPlainScalar()) || (style != null &amp;&amp; ev.getImplicit()</span>
+<span class="nc bnc" id="L885" title="All 2 branches missed.">                    .canOmitTagInNonPlainScalar()))) {</span>
+<span class="nc" id="L886">                preparedTag = null;</span>
+<span class="nc" id="L887">                return;</span>
+            }
+<span class="nc bnc" id="L889" title="All 4 branches missed.">            if (ev.getImplicit().canOmitTagInPlainScalar() &amp;&amp; tag == null) {</span>
+<span class="nc" id="L890">                tag = &quot;!&quot;;</span>
+<span class="nc" id="L891">                preparedTag = null;</span>
+            }
+<span class="nc" id="L893">        } else {</span>
+<span class="nc" id="L894">            CollectionStartEvent ev = (CollectionStartEvent) event;</span>
+<span class="nc" id="L895">            tag = ev.getTag();</span>
+<span class="nc bnc" id="L896" title="All 6 branches missed.">            if ((!canonical || tag == null) &amp;&amp; ev.getImplicit()) {</span>
+<span class="nc" id="L897">                preparedTag = null;</span>
+<span class="nc" id="L898">                return;</span>
+            }
+        }
+<span class="nc bnc" id="L901" title="All 2 branches missed.">        if (tag == null) {</span>
+<span class="nc" id="L902">            throw new EmitterException(&quot;tag is not specified&quot;);</span>
+        }
+<span class="nc bnc" id="L904" title="All 2 branches missed.">        if (preparedTag == null) {</span>
+<span class="nc" id="L905">            preparedTag = prepareTag(tag);</span>
+        }
+<span class="nc" id="L907">        writeIndicator(preparedTag, true, false, false);</span>
+<span class="nc" id="L908">        preparedTag = null;</span>
+<span class="nc" id="L909">    }</span>
+
+    private DumperOptions.ScalarStyle chooseScalarStyle() {
+<span class="nc" id="L912">        ScalarEvent ev = (ScalarEvent) event;</span>
+<span class="nc bnc" id="L913" title="All 2 branches missed.">        if (analysis == null) {</span>
+<span class="nc" id="L914">            analysis = analyzeScalar(ev.getValue());</span>
+        }
+<span class="nc bnc" id="L916" title="All 6 branches missed.">        if (!ev.isPlain() &amp;&amp; ev.getScalarStyle() == DumperOptions.ScalarStyle.DOUBLE_QUOTED || this.canonical) {</span>
+<span class="nc" id="L917">            return DumperOptions.ScalarStyle.DOUBLE_QUOTED;</span>
+        }
+<span class="nc bnc" id="L919" title="All 4 branches missed.">        if (ev.isPlain() &amp;&amp; ev.getImplicit().canOmitTagInPlainScalar()) {</span>
+<span class="nc bnc" id="L920" title="All 6 branches missed.">            if (!(simpleKeyContext &amp;&amp; (analysis.isEmpty() || analysis.isMultiline()))</span>
+<span class="nc bnc" id="L921" title="All 8 branches missed.">                    &amp;&amp; ((flowLevel != 0 &amp;&amp; analysis.isAllowFlowPlain()) || (flowLevel == 0 &amp;&amp; analysis.isAllowBlockPlain()))) {</span>
+<span class="nc" id="L922">                return null;</span>
+            }
+        }
+<span class="nc bnc" id="L925" title="All 6 branches missed.">        if (!ev.isPlain() &amp;&amp; (ev.getScalarStyle() == DumperOptions.ScalarStyle.LITERAL || ev.getScalarStyle() == DumperOptions.ScalarStyle.FOLDED)) {</span>
+<span class="nc bnc" id="L926" title="All 6 branches missed.">            if (flowLevel == 0 &amp;&amp; !simpleKeyContext &amp;&amp; analysis.isAllowBlock()) {</span>
+<span class="nc" id="L927">                return ev.getScalarStyle();</span>
+            }
+        }
+<span class="nc bnc" id="L930" title="All 4 branches missed.">        if (ev.isPlain() || ev.getScalarStyle() == DumperOptions.ScalarStyle.SINGLE_QUOTED) {</span>
+<span class="nc bnc" id="L931" title="All 6 branches missed.">            if (analysis.isAllowSingleQuoted() &amp;&amp; !(simpleKeyContext &amp;&amp; analysis.isMultiline())) {</span>
+<span class="nc" id="L932">                return DumperOptions.ScalarStyle.SINGLE_QUOTED;</span>
+            }
+        }
+<span class="nc" id="L935">        return DumperOptions.ScalarStyle.DOUBLE_QUOTED;</span>
+    }
+
+    private void processScalar() throws IOException {
+<span class="nc" id="L939">        ScalarEvent ev = (ScalarEvent) event;</span>
+<span class="nc bnc" id="L940" title="All 2 branches missed.">        if (analysis == null) {</span>
+<span class="nc" id="L941">            analysis = analyzeScalar(ev.getValue());</span>
+        }
+<span class="nc bnc" id="L943" title="All 2 branches missed.">        if (style == null) {</span>
+<span class="nc" id="L944">            style = chooseScalarStyle();</span>
+        }
+<span class="nc bnc" id="L946" title="All 4 branches missed.">        boolean split = !simpleKeyContext &amp;&amp; splitLines;</span>
+<span class="nc bnc" id="L947" title="All 2 branches missed.">        if (style == null) {</span>
+<span class="nc" id="L948">            writePlain(analysis.getScalar(), split);</span>
+<span class="nc" id="L949">        } else {</span>
+<span class="nc bnc" id="L950" title="All 5 branches missed.">            switch (style) {</span>
+                case DOUBLE_QUOTED:
+<span class="nc" id="L952">                    writeDoubleQuoted(analysis.getScalar(), split);</span>
+<span class="nc" id="L953">                    break;</span>
+                case SINGLE_QUOTED:
+<span class="nc" id="L955">                    writeSingleQuoted(analysis.getScalar(), split);</span>
+<span class="nc" id="L956">                    break;</span>
+                case FOLDED:
+<span class="nc" id="L958">                    writeFolded(analysis.getScalar(), split);</span>
+<span class="nc" id="L959">                    break;</span>
+                case LITERAL:
+<span class="nc" id="L961">                    writeLiteral(analysis.getScalar());</span>
+<span class="nc" id="L962">                    break;</span>
+                default:
+<span class="nc" id="L964">                    throw new YAMLException(&quot;Unexpected style: &quot; + style);</span>
+            }
+        }
+<span class="nc" id="L967">        analysis = null;</span>
+<span class="nc" id="L968">        style = null;</span>
+<span class="nc" id="L969">    }</span>
+
+    // Analyzers.
+
+    private String prepareVersion(Version version) {
+<span class="nc bnc" id="L974" title="All 2 branches missed.">        if (version.major() != 1) {</span>
+<span class="nc" id="L975">            throw new EmitterException(&quot;unsupported YAML version: &quot; + version);</span>
+        }
+<span class="nc" id="L977">        return version.getRepresentation();</span>
+    }
+
+<span class="nc" id="L980">    private final static Pattern HANDLE_FORMAT = Pattern.compile(&quot;^![-_\\w]*!$&quot;);</span>
+
+    private String prepareTagHandle(String handle) {
+<span class="nc bnc" id="L983" title="All 2 branches missed.">        if (handle.length() == 0) {</span>
+<span class="nc" id="L984">            throw new EmitterException(&quot;tag handle must not be empty&quot;);</span>
+<span class="nc bnc" id="L985" title="All 4 branches missed.">        } else if (handle.charAt(0) != '!' || handle.charAt(handle.length() - 1) != '!') {</span>
+<span class="nc" id="L986">            throw new EmitterException(&quot;tag handle must start and end with '!': &quot; + handle);</span>
+<span class="nc bnc" id="L987" title="All 4 branches missed.">        } else if (!&quot;!&quot;.equals(handle) &amp;&amp; !HANDLE_FORMAT.matcher(handle).matches()) {</span>
+<span class="nc" id="L988">            throw new EmitterException(&quot;invalid character in the tag handle: &quot; + handle);</span>
+        }
+<span class="nc" id="L990">        return handle;</span>
+    }
+
+    private String prepareTagPrefix(String prefix) {
+<span class="nc bnc" id="L994" title="All 2 branches missed.">        if (prefix.length() == 0) {</span>
+<span class="nc" id="L995">            throw new EmitterException(&quot;tag prefix must not be empty&quot;);</span>
+        }
+<span class="nc" id="L997">        StringBuilder chunks = new StringBuilder();</span>
+<span class="nc" id="L998">        int start = 0;</span>
+<span class="nc" id="L999">        int end = 0;</span>
+<span class="nc bnc" id="L1000" title="All 2 branches missed.">        if (prefix.charAt(0) == '!') {</span>
+<span class="nc" id="L1001">            end = 1;</span>
+        }
+<span class="nc bnc" id="L1003" title="All 2 branches missed.">        while (end &lt; prefix.length()) {</span>
+<span class="nc" id="L1004">            end++;</span>
+        }
+<span class="nc bnc" id="L1006" title="All 2 branches missed.">        if (start &lt; end) {</span>
+<span class="nc" id="L1007">            chunks.append(prefix, start, end);</span>
+        }
+<span class="nc" id="L1009">        return chunks.toString();</span>
+    }
+
+    private String prepareTag(String tag) {
+<span class="nc bnc" id="L1013" title="All 2 branches missed.">        if (tag.length() == 0) {</span>
+<span class="nc" id="L1014">            throw new EmitterException(&quot;tag must not be empty&quot;);</span>
+        }
+<span class="nc bnc" id="L1016" title="All 2 branches missed.">        if (&quot;!&quot;.equals(tag)) {</span>
+<span class="nc" id="L1017">            return tag;</span>
+        }
+<span class="nc" id="L1019">        String handle = null;</span>
+<span class="nc" id="L1020">        String suffix = tag;</span>
+        // shall the tag prefixes be sorted as in PyYAML?
+<span class="nc bnc" id="L1022" title="All 2 branches missed.">        for (String prefix : tagPrefixes.keySet()) {</span>
+<span class="nc bnc" id="L1023" title="All 6 branches missed.">            if (tag.startsWith(prefix) &amp;&amp; (&quot;!&quot;.equals(prefix) || prefix.length() &lt; tag.length())) {</span>
+<span class="nc" id="L1024">                handle = prefix;</span>
+            }
+        }
+<span class="nc bnc" id="L1027" title="All 2 branches missed.">        if (handle != null) {</span>
+<span class="nc" id="L1028">            suffix = tag.substring(handle.length());</span>
+<span class="nc" id="L1029">            handle = tagPrefixes.get(handle);</span>
+        }
+
+<span class="nc" id="L1032">        int end = suffix.length();</span>
+<span class="nc bnc" id="L1033" title="All 2 branches missed.">        String suffixText = end &gt; 0 ? suffix.substring(0, end) : &quot;&quot;;</span>
+
+<span class="nc bnc" id="L1035" title="All 2 branches missed.">        if (handle != null) {</span>
+<span class="nc" id="L1036">            return handle + suffixText;</span>
+        }
+<span class="nc" id="L1038">        return &quot;!&lt;&quot; + suffixText + &quot;&gt;&quot;;</span>
+    }
+
+    static String prepareAnchor(String anchor) {
+<span class="nc bnc" id="L1042" title="All 2 branches missed.">        if (anchor.length() == 0) {</span>
+<span class="nc" id="L1043">            throw new EmitterException(&quot;anchor must not be empty&quot;);</span>
+        }
+<span class="nc bnc" id="L1045" title="All 2 branches missed.">        for (Character invalid : INVALID_ANCHOR) {</span>
+<span class="nc bnc" id="L1046" title="All 2 branches missed.">            if (anchor.indexOf(invalid) &gt; -1) {</span>
+<span class="nc" id="L1047">                throw new EmitterException(&quot;Invalid character '&quot; + invalid + &quot;' in the anchor: &quot; + anchor);</span>
+            }
+        }
+<span class="nc" id="L1050">        Matcher matcher = SPACES_PATTERN.matcher(anchor);</span>
+<span class="nc bnc" id="L1051" title="All 2 branches missed.">        if (matcher.find()) {</span>
+<span class="nc" id="L1052">            throw new EmitterException(&quot;Anchor may not contain spaces: &quot; + anchor);</span>
+        }
+<span class="nc" id="L1054">        return anchor;</span>
+    }
+
+    private ScalarAnalysis analyzeScalar(String scalar) {
+        // Empty scalar is a special case.
+<span class="nc bnc" id="L1059" title="All 2 branches missed.">        if (scalar.length() == 0) {</span>
+<span class="nc" id="L1060">            return new ScalarAnalysis(scalar, true, false, false, true, true, false);</span>
+        }
+        // Indicators and special characters.
+<span class="nc" id="L1063">        boolean blockIndicators = false;</span>
+<span class="nc" id="L1064">        boolean flowIndicators = false;</span>
+<span class="nc" id="L1065">        boolean lineBreaks = false;</span>
+<span class="nc" id="L1066">        boolean specialCharacters = false;</span>
+
+        // Important whitespace combinations.
+<span class="nc" id="L1069">        boolean leadingSpace = false;</span>
+<span class="nc" id="L1070">        boolean leadingBreak = false;</span>
+<span class="nc" id="L1071">        boolean trailingSpace = false;</span>
+<span class="nc" id="L1072">        boolean trailingBreak = false;</span>
+<span class="nc" id="L1073">        boolean breakSpace = false;</span>
+<span class="nc" id="L1074">        boolean spaceBreak = false;</span>
+
+        // Check document indicators.
+<span class="nc bnc" id="L1077" title="All 4 branches missed.">        if (scalar.startsWith(&quot;---&quot;) || scalar.startsWith(&quot;...&quot;)) {</span>
+<span class="nc" id="L1078">            blockIndicators = true;</span>
+<span class="nc" id="L1079">            flowIndicators = true;</span>
+        }
+        // First character or preceded by a whitespace.
+<span class="nc" id="L1082">        boolean preceededByWhitespace = true;</span>
+<span class="nc bnc" id="L1083" title="All 4 branches missed.">        boolean followedByWhitespace = scalar.length() == 1 || Constant.NULL_BL_T_LINEBR.has(scalar.codePointAt(1));</span>
+        // The previous character is a space.
+<span class="nc" id="L1085">        boolean previousSpace = false;</span>
+
+        // The previous character is a break.
+<span class="nc" id="L1088">        boolean previousBreak = false;</span>
+
+<span class="nc" id="L1090">        int index = 0;</span>
+
+<span class="nc bnc" id="L1092" title="All 2 branches missed.">        while (index &lt; scalar.length()) {</span>
+<span class="nc" id="L1093">            int c = scalar.codePointAt(index);</span>
+            // Check for indicators.
+<span class="nc bnc" id="L1095" title="All 2 branches missed.">            if (index == 0) {</span>
+                // Leading indicators are special characters.
+<span class="nc bnc" id="L1097" title="All 2 branches missed.">                if (&quot;#,[]{}&amp;*!|&gt;'\&quot;%@`&quot;.indexOf(c) != -1) {</span>
+<span class="nc" id="L1098">                    flowIndicators = true;</span>
+<span class="nc" id="L1099">                    blockIndicators = true;</span>
+                }
+<span class="nc bnc" id="L1101" title="All 4 branches missed.">                if (c == '?' || c == ':') {</span>
+<span class="nc" id="L1102">                    flowIndicators = true;</span>
+<span class="nc bnc" id="L1103" title="All 2 branches missed.">                    if (followedByWhitespace) {</span>
+<span class="nc" id="L1104">                        blockIndicators = true;</span>
+                    }
+                }
+<span class="nc bnc" id="L1107" title="All 4 branches missed.">                if (c == '-' &amp;&amp; followedByWhitespace) {</span>
+<span class="nc" id="L1108">                    flowIndicators = true;</span>
+<span class="nc" id="L1109">                    blockIndicators = true;</span>
+                }
+<span class="nc" id="L1111">            } else {</span>
+                // Some indicators cannot appear within a scalar as well.
+<span class="nc bnc" id="L1113" title="All 2 branches missed.">                if (&quot;,?[]{}&quot;.indexOf(c) != -1) {</span>
+<span class="nc" id="L1114">                    flowIndicators = true;</span>
+                }
+<span class="nc bnc" id="L1116" title="All 2 branches missed.">                if (c == ':') {</span>
+<span class="nc" id="L1117">                    flowIndicators = true;</span>
+<span class="nc bnc" id="L1118" title="All 2 branches missed.">                    if (followedByWhitespace) {</span>
+<span class="nc" id="L1119">                        blockIndicators = true;</span>
+                    }
+                }
+<span class="nc bnc" id="L1122" title="All 4 branches missed.">                if (c == '#' &amp;&amp; preceededByWhitespace) {</span>
+<span class="nc" id="L1123">                    flowIndicators = true;</span>
+<span class="nc" id="L1124">                    blockIndicators = true;</span>
+                }
+            }
+            // Check for line breaks, special, and unicode characters.
+<span class="nc" id="L1128">            boolean isLineBreak = Constant.LINEBR.has(c);</span>
+<span class="nc bnc" id="L1129" title="All 2 branches missed.">            if (isLineBreak) {</span>
+<span class="nc" id="L1130">                lineBreaks = true;</span>
+            }
+<span class="nc bnc" id="L1132" title="All 6 branches missed.">            if (!(c == '\n' || (0x20 &lt;= c &amp;&amp; c &lt;= 0x7E))) {</span>
+<span class="nc bnc" id="L1133" title="All 6 branches missed.">                if (c == 0x85 || (c &gt;= 0xA0 &amp;&amp; c &lt;= 0xD7FF)</span>
+<span class="nc bnc" id="L1134" title="All 4 branches missed.">                        || (c &gt;= 0xE000 &amp;&amp; c &lt;= 0xFFFD)</span>
+<span class="nc bnc" id="L1135" title="All 4 branches missed.">                        || (c &gt;= 0x10000 &amp;&amp; c &lt;= 0x10FFFF)) {</span>
+                    // unicode is used
+<span class="nc bnc" id="L1137" title="All 2 branches missed.">                    if (!this.allowUnicode) {</span>
+<span class="nc" id="L1138">                        specialCharacters = true;</span>
+                    }
+<span class="nc" id="L1140">                } else {</span>
+<span class="nc" id="L1141">                    specialCharacters = true;</span>
+                }
+            }
+            // Detect important whitespace combinations.
+<span class="nc bnc" id="L1145" title="All 2 branches missed.">            if (c == ' ') {</span>
+<span class="nc bnc" id="L1146" title="All 2 branches missed.">                if (index == 0) {</span>
+<span class="nc" id="L1147">                    leadingSpace = true;</span>
+                }
+<span class="nc bnc" id="L1149" title="All 2 branches missed.">                if (index == scalar.length() - 1) {</span>
+<span class="nc" id="L1150">                    trailingSpace = true;</span>
+                }
+<span class="nc bnc" id="L1152" title="All 2 branches missed.">                if (previousBreak) {</span>
+<span class="nc" id="L1153">                    breakSpace = true;</span>
+                }
+<span class="nc" id="L1155">                previousSpace = true;</span>
+<span class="nc" id="L1156">                previousBreak = false;</span>
+<span class="nc bnc" id="L1157" title="All 2 branches missed.">            } else if (isLineBreak) {</span>
+<span class="nc bnc" id="L1158" title="All 2 branches missed.">                if (index == 0) {</span>
+<span class="nc" id="L1159">                    leadingBreak = true;</span>
+                }
+<span class="nc bnc" id="L1161" title="All 2 branches missed.">                if (index == scalar.length() - 1) {</span>
+<span class="nc" id="L1162">                    trailingBreak = true;</span>
+                }
+<span class="nc bnc" id="L1164" title="All 2 branches missed.">                if (previousSpace) {</span>
+<span class="nc" id="L1165">                    spaceBreak = true;</span>
+                }
+<span class="nc" id="L1167">                previousSpace = false;</span>
+<span class="nc" id="L1168">                previousBreak = true;</span>
+<span class="nc" id="L1169">            } else {</span>
+<span class="nc" id="L1170">                previousSpace = false;</span>
+<span class="nc" id="L1171">                previousBreak = false;</span>
+            }
+
+            // Prepare for the next character.
+<span class="nc" id="L1175">            index += Character.charCount(c);</span>
+<span class="nc bnc" id="L1176" title="All 4 branches missed.">            preceededByWhitespace = Constant.NULL_BL_T.has(c) || isLineBreak;</span>
+<span class="nc" id="L1177">            followedByWhitespace = true;</span>
+<span class="nc bnc" id="L1178" title="All 2 branches missed.">            if (index + 1 &lt; scalar.length()) {</span>
+<span class="nc" id="L1179">                int nextIndex = index + Character.charCount(scalar.codePointAt(index));</span>
+<span class="nc bnc" id="L1180" title="All 2 branches missed.">                if (nextIndex &lt; scalar.length()) {</span>
+<span class="nc bnc" id="L1181" title="All 4 branches missed.">                    followedByWhitespace = (Constant.NULL_BL_T.has(scalar.codePointAt(nextIndex))) || isLineBreak;</span>
+                }
+            }
+        }
+        // Let's decide what styles are allowed.
+<span class="nc" id="L1186">        boolean allowFlowPlain = true;</span>
+<span class="nc" id="L1187">        boolean allowBlockPlain = true;</span>
+<span class="nc" id="L1188">        boolean allowSingleQuoted = true;</span>
+<span class="nc" id="L1189">        boolean allowBlock = true;</span>
+        // Leading and trailing whitespaces are bad for plain scalars.
+<span class="nc bnc" id="L1191" title="All 8 branches missed.">        if (leadingSpace || leadingBreak || trailingSpace || trailingBreak) {</span>
+<span class="nc" id="L1192">            allowFlowPlain = allowBlockPlain = false;</span>
+        }
+        // We do not permit trailing spaces for block scalars.
+<span class="nc bnc" id="L1195" title="All 2 branches missed.">        if (trailingSpace) {</span>
+<span class="nc" id="L1196">            allowBlock = false;</span>
+        }
+        // Spaces at the beginning of a new line are only acceptable for block
+        // scalars.
+<span class="nc bnc" id="L1200" title="All 2 branches missed.">        if (breakSpace) {</span>
+<span class="nc" id="L1201">            allowFlowPlain = allowBlockPlain = allowSingleQuoted = false;</span>
+        }
+        // Spaces followed by breaks, as well as special character are only
+        // allowed for double quoted scalars.
+<span class="nc bnc" id="L1205" title="All 4 branches missed.">        if (spaceBreak || specialCharacters) {</span>
+<span class="nc" id="L1206">            allowFlowPlain = allowBlockPlain = allowSingleQuoted = allowBlock = false;</span>
+        }
+        // Although the plain scalar writer supports breaks, we never emit
+        // multiline plain scalars in the flow context.
+<span class="nc bnc" id="L1210" title="All 2 branches missed.">        if (lineBreaks) {</span>
+<span class="nc" id="L1211">            allowFlowPlain = false;</span>
+        }
+        // Flow indicators are forbidden for flow plain scalars.
+<span class="nc bnc" id="L1214" title="All 2 branches missed.">        if (flowIndicators) {</span>
+<span class="nc" id="L1215">            allowFlowPlain = false;</span>
+        }
+        // Block indicators are forbidden for block plain scalars.
+<span class="nc bnc" id="L1218" title="All 2 branches missed.">        if (blockIndicators) {</span>
+<span class="nc" id="L1219">            allowBlockPlain = false;</span>
+        }
+
+<span class="nc" id="L1222">        return new ScalarAnalysis(scalar, false, lineBreaks, allowFlowPlain, allowBlockPlain,</span>
+<span class="nc" id="L1223">                allowSingleQuoted, allowBlock);</span>
+    }
+
+    // Writers.
+
+    void flushStream() throws IOException {
+<span class="nc" id="L1229">        stream.flush();</span>
+<span class="nc" id="L1230">    }</span>
+
+    void writeStreamStart() {
+        // BOM is written by Writer.
+<span class="nc" id="L1234">    }</span>
+
+    void writeStreamEnd() throws IOException {
+<span class="nc" id="L1237">        flushStream();</span>
+<span class="nc" id="L1238">    }</span>
+
+    void writeIndicator(String indicator, boolean needWhitespace, boolean whitespace,
+                        boolean indentation) throws IOException {
+<span class="nc bnc" id="L1242" title="All 4 branches missed.">        if (!this.whitespace &amp;&amp; needWhitespace) {</span>
+<span class="nc" id="L1243">            this.column++;</span>
+<span class="nc" id="L1244">            stream.write(SPACE);</span>
+        }
+<span class="nc" id="L1246">        this.whitespace = whitespace;</span>
+<span class="nc bnc" id="L1247" title="All 4 branches missed.">        this.indention = this.indention &amp;&amp; indentation;</span>
+<span class="nc" id="L1248">        this.column += indicator.length();</span>
+<span class="nc" id="L1249">        openEnded = false;</span>
+<span class="nc" id="L1250">        stream.write(indicator);</span>
+<span class="nc" id="L1251">    }</span>
+
+    void writeIndent() throws IOException {
+        int indent;
+<span class="nc bnc" id="L1255" title="All 2 branches missed.">        if (this.indent != null) {</span>
+<span class="nc" id="L1256">            indent = this.indent;</span>
+<span class="nc" id="L1257">        } else {</span>
+<span class="nc" id="L1258">            indent = 0;</span>
+        }
+
+<span class="nc bnc" id="L1261" title="All 8 branches missed.">        if (!this.indention || this.column &gt; indent || (this.column == indent &amp;&amp; !this.whitespace)) {</span>
+<span class="nc" id="L1262">            writeLineBreak(null);</span>
+        }
+
+<span class="nc" id="L1265">        writeWhitespace(indent - this.column);</span>
+<span class="nc" id="L1266">    }</span>
+
+    private void writeWhitespace(int length) throws IOException {
+<span class="nc bnc" id="L1269" title="All 2 branches missed.">        if (length &lt;= 0) {</span>
+<span class="nc" id="L1270">            return;</span>
+        }
+<span class="nc" id="L1272">        this.whitespace = true;</span>
+<span class="nc" id="L1273">        char[] data = new char[length];</span>
+<span class="nc bnc" id="L1274" title="All 2 branches missed.">        for (int i = 0; i &lt; data.length; i++) {</span>
+<span class="nc" id="L1275">            data[i] = ' ';</span>
+        }
+<span class="nc" id="L1277">        this.column += length;</span>
+<span class="nc" id="L1278">        stream.write(data);</span>
+<span class="nc" id="L1279">    }</span>
+
+    private void writeLineBreak(String data) throws IOException {
+<span class="nc" id="L1282">        this.whitespace = true;</span>
+<span class="nc" id="L1283">        this.indention = true;</span>
+<span class="nc" id="L1284">        this.column = 0;</span>
+<span class="nc bnc" id="L1285" title="All 2 branches missed.">        if (data == null) {</span>
+<span class="nc" id="L1286">            stream.write(this.bestLineBreak);</span>
+<span class="nc" id="L1287">        } else {</span>
+<span class="nc" id="L1288">            stream.write(data);</span>
+        }
+<span class="nc" id="L1290">    }</span>
+
+    void writeVersionDirective(String versionText) throws IOException {
+<span class="nc" id="L1293">        stream.write(&quot;%YAML &quot;);</span>
+<span class="nc" id="L1294">        stream.write(versionText);</span>
+<span class="nc" id="L1295">        writeLineBreak(null);</span>
+<span class="nc" id="L1296">    }</span>
+
+    void writeTagDirective(String handleText, String prefixText) throws IOException {
+        // XXX: not sure 4 invocations better then StringBuilders created by str
+        // + str
+<span class="nc" id="L1301">        stream.write(&quot;%TAG &quot;);</span>
+<span class="nc" id="L1302">        stream.write(handleText);</span>
+<span class="nc" id="L1303">        stream.write(SPACE);</span>
+<span class="nc" id="L1304">        stream.write(prefixText);</span>
+<span class="nc" id="L1305">        writeLineBreak(null);</span>
+<span class="nc" id="L1306">    }</span>
+
+    // Scalar streams.
+    private void writeSingleQuoted(String text, boolean split) throws IOException {
+<span class="nc" id="L1310">        writeIndicator(&quot;'&quot;, true, false, false);</span>
+<span class="nc" id="L1311">        boolean spaces = false;</span>
+<span class="nc" id="L1312">        boolean breaks = false;</span>
+<span class="nc" id="L1313">        int start = 0, end = 0;</span>
+        char ch;
+<span class="nc bnc" id="L1315" title="All 2 branches missed.">        while (end &lt;= text.length()) {</span>
+<span class="nc" id="L1316">            ch = 0;</span>
+<span class="nc bnc" id="L1317" title="All 2 branches missed.">            if (end &lt; text.length()) {</span>
+<span class="nc" id="L1318">                ch = text.charAt(end);</span>
+            }
+<span class="nc bnc" id="L1320" title="All 2 branches missed.">            if (spaces) {</span>
+<span class="nc bnc" id="L1321" title="All 4 branches missed.">                if (ch == 0 || ch != ' ') {</span>
+<span class="nc bnc" id="L1322" title="All 8 branches missed.">                    if (start + 1 == end &amp;&amp; this.column &gt; this.bestWidth &amp;&amp; split &amp;&amp; start != 0</span>
+<span class="nc bnc" id="L1323" title="All 2 branches missed.">                            &amp;&amp; end != text.length()) {</span>
+<span class="nc" id="L1324">                        writeIndent();</span>
+<span class="nc" id="L1325">                    } else {</span>
+<span class="nc" id="L1326">                        int len = end - start;</span>
+<span class="nc" id="L1327">                        this.column += len;</span>
+<span class="nc" id="L1328">                        stream.write(text, start, len);</span>
+                    }
+<span class="nc" id="L1330">                    start = end;</span>
+                }
+<span class="nc bnc" id="L1332" title="All 2 branches missed.">            } else if (breaks) {</span>
+<span class="nc bnc" id="L1333" title="All 4 branches missed.">                if (ch == 0 || Constant.LINEBR.hasNo(ch)) {</span>
+<span class="nc bnc" id="L1334" title="All 2 branches missed.">                    if (text.charAt(start) == '\n') {</span>
+<span class="nc" id="L1335">                        writeLineBreak(null);</span>
+                    }
+<span class="nc" id="L1337">                    String data = text.substring(start, end);</span>
+<span class="nc bnc" id="L1338" title="All 2 branches missed.">                    for (char br : data.toCharArray()) {</span>
+<span class="nc bnc" id="L1339" title="All 2 branches missed.">                        if (br == '\n') {</span>
+<span class="nc" id="L1340">                            writeLineBreak(null);</span>
+<span class="nc" id="L1341">                        } else {</span>
+<span class="nc" id="L1342">                            writeLineBreak(String.valueOf(br));</span>
+                        }
+                    }
+<span class="nc" id="L1345">                    writeIndent();</span>
+<span class="nc" id="L1346">                    start = end;</span>
+                }
+<span class="nc" id="L1348">            } else {</span>
+<span class="nc bnc" id="L1349" title="All 2 branches missed.">                if (Constant.LINEBR.has(ch, &quot;\0 '&quot;)) {</span>
+<span class="nc bnc" id="L1350" title="All 2 branches missed.">                    if (start &lt; end) {</span>
+<span class="nc" id="L1351">                        int len = end - start;</span>
+<span class="nc" id="L1352">                        this.column += len;</span>
+<span class="nc" id="L1353">                        stream.write(text, start, len);</span>
+<span class="nc" id="L1354">                        start = end;</span>
+                    }
+                }
+            }
+<span class="nc bnc" id="L1358" title="All 2 branches missed.">            if (ch == '\'') {</span>
+<span class="nc" id="L1359">                this.column += 2;</span>
+<span class="nc" id="L1360">                stream.write(&quot;''&quot;);</span>
+<span class="nc" id="L1361">                start = end + 1;</span>
+            }
+<span class="nc bnc" id="L1363" title="All 2 branches missed.">            if (ch != 0) {</span>
+<span class="nc bnc" id="L1364" title="All 2 branches missed.">                spaces = ch == ' ';</span>
+<span class="nc" id="L1365">                breaks = Constant.LINEBR.has(ch);</span>
+            }
+<span class="nc" id="L1367">            end++;</span>
+        }
+<span class="nc" id="L1369">        writeIndicator(&quot;'&quot;, false, false, false);</span>
+<span class="nc" id="L1370">    }</span>
+
+    private void writeDoubleQuoted(String text, boolean split) throws IOException {
+<span class="nc" id="L1373">        writeIndicator(&quot;\&quot;&quot;, true, false, false);</span>
+<span class="nc" id="L1374">        int start = 0;</span>
+<span class="nc" id="L1375">        int end = 0;</span>
+<span class="nc bnc" id="L1376" title="All 2 branches missed.">        while (end &lt;= text.length()) {</span>
+<span class="nc" id="L1377">            Character ch = null;</span>
+<span class="nc bnc" id="L1378" title="All 2 branches missed.">            if (end &lt; text.length()) {</span>
+<span class="nc" id="L1379">                ch = text.charAt(end);</span>
+            }
+<span class="nc bnc" id="L1381" title="All 4 branches missed.">            if (ch == null || &quot;\&quot;\\\u0085\u2028\u2029\uFEFF&quot;.indexOf(ch) != -1</span>
+<span class="nc bnc" id="L1382" title="All 4 branches missed.">                    || !('\u0020' &lt;= ch &amp;&amp; ch &lt;= '\u007E')) {</span>
+<span class="nc bnc" id="L1383" title="All 2 branches missed.">                if (start &lt; end) {</span>
+<span class="nc" id="L1384">                    int len = end - start;</span>
+<span class="nc" id="L1385">                    this.column += len;</span>
+<span class="nc" id="L1386">                    stream.write(text, start, len);</span>
+<span class="nc" id="L1387">                    start = end;</span>
+                }
+<span class="nc bnc" id="L1389" title="All 2 branches missed.">                if (ch != null) {</span>
+                    String data;
+<span class="nc bnc" id="L1391" title="All 2 branches missed.">                    if (ESCAPE_REPLACEMENTS.containsKey(ch)) {</span>
+<span class="nc" id="L1392">                        data = &quot;\\&quot; + ESCAPE_REPLACEMENTS.get(ch);</span>
+<span class="nc bnc" id="L1393" title="All 4 branches missed.">                    } else if (!this.allowUnicode || !StreamReader.isPrintable(ch)) {</span>
+                        // if !allowUnicode or the character is not printable,
+                        // we must encode it
+<span class="nc bnc" id="L1396" title="All 2 branches missed.">                        if (ch &lt;= '\u00FF') {</span>
+<span class="nc" id="L1397">                            String s = &quot;0&quot; + Integer.toString(ch, 16);</span>
+<span class="nc" id="L1398">                            data = &quot;\\x&quot; + s.substring(s.length() - 2);</span>
+<span class="nc bnc" id="L1399" title="All 4 branches missed.">                        } else if (ch &gt;= '\uD800' &amp;&amp; ch &lt;= '\uDBFF') {</span>
+<span class="nc bnc" id="L1400" title="All 2 branches missed.">                            if (end + 1 &lt; text.length()) {</span>
+<span class="nc" id="L1401">                                Character ch2 = text.charAt(++end);</span>
+<span class="nc" id="L1402">                                String s = &quot;000&quot; + Long.toHexString(Character.toCodePoint(ch, ch2));</span>
+<span class="nc" id="L1403">                                data = &quot;\\U&quot; + s.substring(s.length() - 8);</span>
+<span class="nc" id="L1404">                            } else {</span>
+<span class="nc" id="L1405">                                String s = &quot;000&quot; + Integer.toString(ch, 16);</span>
+<span class="nc" id="L1406">                                data = &quot;\\u&quot; + s.substring(s.length() - 4);</span>
+                            }
+<span class="nc" id="L1408">                        } else {</span>
+<span class="nc" id="L1409">                            String s = &quot;000&quot; + Integer.toString(ch, 16);</span>
+<span class="nc" id="L1410">                            data = &quot;\\u&quot; + s.substring(s.length() - 4);</span>
+                        }
+<span class="nc" id="L1412">                    } else {</span>
+<span class="nc" id="L1413">                        data = String.valueOf(ch);</span>
+                    }
+<span class="nc" id="L1415">                    this.column += data.length();</span>
+<span class="nc" id="L1416">                    stream.write(data);</span>
+<span class="nc" id="L1417">                    start = end + 1;</span>
+                }
+            }
+<span class="nc bnc" id="L1420" title="All 8 branches missed.">            if ((0 &lt; end &amp;&amp; end &lt; (text.length() - 1)) &amp;&amp; (ch == ' ' || start &gt;= end)</span>
+<span class="nc bnc" id="L1421" title="All 4 branches missed.">                    &amp;&amp; (this.column + (end - start)) &gt; this.bestWidth &amp;&amp; split) {</span>
+                String data;
+<span class="nc bnc" id="L1423" title="All 2 branches missed.">                if (start &gt;= end) {</span>
+<span class="nc" id="L1424">                    data = &quot;\\&quot;;</span>
+<span class="nc" id="L1425">                } else {</span>
+<span class="nc" id="L1426">                    data = text.substring(start, end) + &quot;\\&quot;;</span>
+                }
+<span class="nc bnc" id="L1428" title="All 2 branches missed.">                if (start &lt; end) {</span>
+<span class="nc" id="L1429">                    start = end;</span>
+                }
+<span class="nc" id="L1431">                this.column += data.length();</span>
+<span class="nc" id="L1432">                stream.write(data);</span>
+<span class="nc" id="L1433">                writeIndent();</span>
+<span class="nc" id="L1434">                this.whitespace = false;</span>
+<span class="nc" id="L1435">                this.indention = false;</span>
+<span class="nc bnc" id="L1436" title="All 2 branches missed.">                if (text.charAt(start) == ' ') {</span>
+<span class="nc" id="L1437">                    data = &quot;\\&quot;;</span>
+<span class="nc" id="L1438">                    this.column += data.length();</span>
+<span class="nc" id="L1439">                    stream.write(data);</span>
+                }
+            }
+<span class="nc" id="L1442">            end += 1;</span>
+        }
+<span class="nc" id="L1444">        writeIndicator(&quot;\&quot;&quot;, false, false, false);</span>
+<span class="nc" id="L1445">    }</span>
+    
+    private boolean writeCommentLines(List&lt;CommentLine&gt; commentLines) throws IOException {
+<span class="nc" id="L1448">        boolean wroteComment = false;</span>
+<span class="nc bnc" id="L1449" title="All 2 branches missed.">        if(emitComments) {</span>
+<span class="nc" id="L1450">            int indentColumns = 0;</span>
+<span class="nc" id="L1451">            boolean firstComment = true;</span>
+<span class="nc bnc" id="L1452" title="All 2 branches missed.">            for (CommentLine commentLine : commentLines) {</span>
+<span class="nc bnc" id="L1453" title="All 2 branches missed.">                if (commentLine.getCommentType() != CommentType.BLANK_LINE) {</span>
+<span class="nc bnc" id="L1454" title="All 2 branches missed.">                    if (firstComment) {</span>
+<span class="nc" id="L1455">                        firstComment = false;</span>
+<span class="nc bnc" id="L1456" title="All 2 branches missed.">                        writeIndicator(&quot;#&quot;, commentLine.getCommentType() == CommentType.IN_LINE, false, false);</span>
+<span class="nc bnc" id="L1457" title="All 2 branches missed.">                        indentColumns = this.column &gt; 0 ? this.column - 1 : 0;</span>
+<span class="nc" id="L1458">                    } else {</span>
+<span class="nc" id="L1459">                        writeWhitespace(indentColumns);</span>
+<span class="nc" id="L1460">                        writeIndicator(&quot;#&quot;, false, false, false);</span>
+                    }
+<span class="nc" id="L1462">                    stream.write(commentLine.getValue());</span>
+<span class="nc" id="L1463">                    writeLineBreak(null);</span>
+<span class="nc" id="L1464">                } else {</span>
+<span class="nc" id="L1465">                    writeLineBreak(null);</span>
+<span class="nc" id="L1466">                    writeIndent();</span>
+                }
+<span class="nc" id="L1468">                wroteComment = true;</span>
+            }
+        }
+<span class="nc" id="L1471">        return wroteComment;</span>
+    }
+    
+    private void writeBlockComment() throws IOException {
+<span class="nc bnc" id="L1475" title="All 2 branches missed.">        if(!blockCommentsCollector.isEmpty()) {</span>
+<span class="nc" id="L1476">            writeIndent();</span>
+<span class="nc" id="L1477">            writeCommentLines(blockCommentsCollector.consume());</span>
+        }
+<span class="nc" id="L1479">    }</span>
+
+    private boolean writeInlineComments() throws IOException {
+<span class="nc" id="L1482">        return writeCommentLines(inlineCommentsCollector.consume());</span>
+    }
+
+    private String determineBlockHints(String text) {
+<span class="nc" id="L1486">        StringBuilder hints = new StringBuilder();</span>
+<span class="nc bnc" id="L1487" title="All 2 branches missed.">        if (Constant.LINEBR.has(text.charAt(0), &quot; &quot;)) {</span>
+<span class="nc" id="L1488">            hints.append(bestIndent);</span>
+        }
+<span class="nc" id="L1490">        char ch1 = text.charAt(text.length() - 1);</span>
+<span class="nc bnc" id="L1491" title="All 2 branches missed.">        if (Constant.LINEBR.hasNo(ch1)) {</span>
+<span class="nc" id="L1492">            hints.append(&quot;-&quot;);</span>
+<span class="nc bnc" id="L1493" title="All 4 branches missed.">        } else if (text.length() == 1 || Constant.LINEBR.has(text.charAt(text.length() - 2))) {</span>
+<span class="nc" id="L1494">            hints.append(&quot;+&quot;);</span>
+        }
+<span class="nc" id="L1496">        return hints.toString();</span>
+    }
+
+    void writeFolded(String text, boolean split) throws IOException {
+<span class="nc" id="L1500">        String hints = determineBlockHints(text);</span>
+<span class="nc" id="L1501">        writeIndicator(&quot;&gt;&quot; + hints, true, false, false);</span>
+<span class="nc bnc" id="L1502" title="All 4 branches missed.">        if (hints.length() &gt; 0 &amp;&amp; (hints.charAt(hints.length() - 1) == '+')) {</span>
+<span class="nc" id="L1503">            openEnded = true;</span>
+        }
+<span class="nc bnc" id="L1505" title="All 2 branches missed.">        if(!writeInlineComments()) {</span>
+<span class="nc" id="L1506">            writeLineBreak(null);</span>
+        }
+<span class="nc" id="L1508">        boolean leadingSpace = true;</span>
+<span class="nc" id="L1509">        boolean spaces = false;</span>
+<span class="nc" id="L1510">        boolean breaks = true;</span>
+<span class="nc" id="L1511">        int start = 0, end = 0;</span>
+<span class="nc bnc" id="L1512" title="All 2 branches missed.">        while (end &lt;= text.length()) {</span>
+<span class="nc" id="L1513">            char ch = 0;</span>
+<span class="nc bnc" id="L1514" title="All 2 branches missed.">            if (end &lt; text.length()) {</span>
+<span class="nc" id="L1515">                ch = text.charAt(end);</span>
+            }
+<span class="nc bnc" id="L1517" title="All 2 branches missed.">            if (breaks) {</span>
+<span class="nc bnc" id="L1518" title="All 4 branches missed.">                if (ch == 0 || Constant.LINEBR.hasNo(ch)) {</span>
+<span class="nc bnc" id="L1519" title="All 8 branches missed.">                    if (!leadingSpace &amp;&amp; ch != 0 &amp;&amp; ch != ' ' &amp;&amp; text.charAt(start) == '\n') {</span>
+<span class="nc" id="L1520">                        writeLineBreak(null);</span>
+                    }
+<span class="nc bnc" id="L1522" title="All 2 branches missed.">                    leadingSpace = ch == ' ';</span>
+<span class="nc" id="L1523">                    String data = text.substring(start, end);</span>
+<span class="nc bnc" id="L1524" title="All 2 branches missed.">                    for (char br : data.toCharArray()) {</span>
+<span class="nc bnc" id="L1525" title="All 2 branches missed.">                        if (br == '\n') {</span>
+<span class="nc" id="L1526">                            writeLineBreak(null);</span>
+<span class="nc" id="L1527">                        } else {</span>
+<span class="nc" id="L1528">                            writeLineBreak(String.valueOf(br));</span>
+                        }
+                    }
+<span class="nc bnc" id="L1531" title="All 2 branches missed.">                    if (ch != 0) {</span>
+<span class="nc" id="L1532">                        writeIndent();</span>
+                    }
+<span class="nc" id="L1534">                    start = end;</span>
+                }
+<span class="nc bnc" id="L1536" title="All 2 branches missed.">            } else if (spaces) {</span>
+<span class="nc bnc" id="L1537" title="All 2 branches missed.">                if (ch != ' ') {</span>
+<span class="nc bnc" id="L1538" title="All 6 branches missed.">                    if (start + 1 == end &amp;&amp; this.column &gt; this.bestWidth &amp;&amp; split) {</span>
+<span class="nc" id="L1539">                        writeIndent();</span>
+<span class="nc" id="L1540">                    } else {</span>
+<span class="nc" id="L1541">                        int len = end - start;</span>
+<span class="nc" id="L1542">                        this.column += len;</span>
+<span class="nc" id="L1543">                        stream.write(text, start, len);</span>
+                    }
+<span class="nc" id="L1545">                    start = end;</span>
+                }
+<span class="nc" id="L1547">            } else {</span>
+<span class="nc bnc" id="L1548" title="All 2 branches missed.">                if (Constant.LINEBR.has(ch, &quot;\0 &quot;)) {</span>
+<span class="nc" id="L1549">                    int len = end - start;</span>
+<span class="nc" id="L1550">                    this.column += len;</span>
+<span class="nc" id="L1551">                    stream.write(text, start, len);</span>
+<span class="nc bnc" id="L1552" title="All 2 branches missed.">                    if (ch == 0) {</span>
+<span class="nc" id="L1553">                        writeLineBreak(null);</span>
+                    }
+<span class="nc" id="L1555">                    start = end;</span>
+                }
+            }
+<span class="nc bnc" id="L1558" title="All 2 branches missed.">            if (ch != 0) {</span>
+<span class="nc" id="L1559">                breaks = Constant.LINEBR.has(ch);</span>
+<span class="nc bnc" id="L1560" title="All 2 branches missed.">                spaces = ch == ' ';</span>
+            }
+<span class="nc" id="L1562">            end++;</span>
+        }
+<span class="nc" id="L1564">    }</span>
+
+    void writeLiteral(String text) throws IOException {
+<span class="nc" id="L1567">        String hints = determineBlockHints(text);</span>
+<span class="nc" id="L1568">        writeIndicator(&quot;|&quot; + hints, true, false, false);</span>
+<span class="nc bnc" id="L1569" title="All 4 branches missed.">        if (hints.length() &gt; 0 &amp;&amp; (hints.charAt(hints.length() - 1)) == '+') {</span>
+<span class="nc" id="L1570">            openEnded = true;</span>
+        }
+<span class="nc bnc" id="L1572" title="All 2 branches missed.">        if(!writeInlineComments()) {</span>
+<span class="nc" id="L1573">            writeLineBreak(null);</span>
+        }
+<span class="nc" id="L1575">        boolean breaks = true;</span>
+<span class="nc" id="L1576">        int start = 0, end = 0;</span>
+<span class="nc bnc" id="L1577" title="All 2 branches missed.">        while (end &lt;= text.length()) {</span>
+<span class="nc" id="L1578">            char ch = 0;</span>
+<span class="nc bnc" id="L1579" title="All 2 branches missed.">            if (end &lt; text.length()) {</span>
+<span class="nc" id="L1580">                ch = text.charAt(end);</span>
+            }
+<span class="nc bnc" id="L1582" title="All 2 branches missed.">            if (breaks) {</span>
+<span class="nc bnc" id="L1583" title="All 4 branches missed.">                if (ch == 0 || Constant.LINEBR.hasNo(ch)) {</span>
+<span class="nc" id="L1584">                    String data = text.substring(start, end);</span>
+<span class="nc bnc" id="L1585" title="All 2 branches missed.">                    for (char br : data.toCharArray()) {</span>
+<span class="nc bnc" id="L1586" title="All 2 branches missed.">                        if (br == '\n') {</span>
+<span class="nc" id="L1587">                            writeLineBreak(null);</span>
+<span class="nc" id="L1588">                        } else {</span>
+<span class="nc" id="L1589">                            writeLineBreak(String.valueOf(br));</span>
+                        }
+                    }
+<span class="nc bnc" id="L1592" title="All 2 branches missed.">                    if (ch != 0) {</span>
+<span class="nc" id="L1593">                        writeIndent();</span>
+                    }
+<span class="nc" id="L1595">                    start = end;</span>
+                }
+<span class="nc" id="L1597">            } else {</span>
+<span class="nc bnc" id="L1598" title="All 4 branches missed.">                if (ch == 0 || Constant.LINEBR.has(ch)) {</span>
+<span class="nc" id="L1599">                    stream.write(text, start, end - start);</span>
+<span class="nc bnc" id="L1600" title="All 2 branches missed.">                    if (ch == 0) {</span>
+<span class="nc" id="L1601">                        writeLineBreak(null);</span>
+                    }
+<span class="nc" id="L1603">                    start = end;</span>
+                }
+            }
+<span class="nc bnc" id="L1606" title="All 2 branches missed.">            if (ch != 0) {</span>
+<span class="nc" id="L1607">                breaks = Constant.LINEBR.has(ch);</span>
+            }
+<span class="nc" id="L1609">            end++;</span>
+        }
+<span class="nc" id="L1611">    }</span>
+
+    void writePlain(String text, boolean split) throws IOException {
+<span class="nc bnc" id="L1614" title="All 2 branches missed.">        if (rootContext) {</span>
+<span class="nc" id="L1615">            openEnded = true;</span>
+        }
+<span class="nc bnc" id="L1617" title="All 2 branches missed.">        if (text.length() == 0) {</span>
+<span class="nc" id="L1618">            return;</span>
+        }
+<span class="nc bnc" id="L1620" title="All 2 branches missed.">        if (!this.whitespace) {</span>
+<span class="nc" id="L1621">            this.column++;</span>
+<span class="nc" id="L1622">            stream.write(SPACE);</span>
+        }
+<span class="nc" id="L1624">        this.whitespace = false;</span>
+<span class="nc" id="L1625">        this.indention = false;</span>
+<span class="nc" id="L1626">        boolean spaces = false;</span>
+<span class="nc" id="L1627">        boolean breaks = false;</span>
+<span class="nc" id="L1628">        int start = 0, end = 0;</span>
+<span class="nc bnc" id="L1629" title="All 2 branches missed.">        while (end &lt;= text.length()) {</span>
+<span class="nc" id="L1630">            char ch = 0;</span>
+<span class="nc bnc" id="L1631" title="All 2 branches missed.">            if (end &lt; text.length()) {</span>
+<span class="nc" id="L1632">                ch = text.charAt(end);</span>
+            }
+<span class="nc bnc" id="L1634" title="All 2 branches missed.">            if (spaces) {</span>
+<span class="nc bnc" id="L1635" title="All 2 branches missed.">                if (ch != ' ') {</span>
+<span class="nc bnc" id="L1636" title="All 6 branches missed.">                    if (start + 1 == end &amp;&amp; this.column &gt; this.bestWidth &amp;&amp; split) {</span>
+<span class="nc" id="L1637">                        writeIndent();</span>
+<span class="nc" id="L1638">                        this.whitespace = false;</span>
+<span class="nc" id="L1639">                        this.indention = false;</span>
+<span class="nc" id="L1640">                    } else {</span>
+<span class="nc" id="L1641">                        int len = end - start;</span>
+<span class="nc" id="L1642">                        this.column += len;</span>
+<span class="nc" id="L1643">                        stream.write(text, start, len);</span>
+                    }
+<span class="nc" id="L1645">                    start = end;</span>
+                }
+<span class="nc bnc" id="L1647" title="All 2 branches missed.">            } else if (breaks) {</span>
+<span class="nc bnc" id="L1648" title="All 2 branches missed.">                if (Constant.LINEBR.hasNo(ch)) {</span>
+<span class="nc bnc" id="L1649" title="All 2 branches missed.">                    if (text.charAt(start) == '\n') {</span>
+<span class="nc" id="L1650">                        writeLineBreak(null);</span>
+                    }
+<span class="nc" id="L1652">                    String data = text.substring(start, end);</span>
+<span class="nc bnc" id="L1653" title="All 2 branches missed.">                    for (char br : data.toCharArray()) {</span>
+<span class="nc bnc" id="L1654" title="All 2 branches missed.">                        if (br == '\n') {</span>
+<span class="nc" id="L1655">                            writeLineBreak(null);</span>
+<span class="nc" id="L1656">                        } else {</span>
+<span class="nc" id="L1657">                            writeLineBreak(String.valueOf(br));</span>
+                        }
+                    }
+<span class="nc" id="L1660">                    writeIndent();</span>
+<span class="nc" id="L1661">                    this.whitespace = false;</span>
+<span class="nc" id="L1662">                    this.indention = false;</span>
+<span class="nc" id="L1663">                    start = end;</span>
+                }
+<span class="nc" id="L1665">            } else {</span>
+<span class="nc bnc" id="L1666" title="All 2 branches missed.">                if (Constant.LINEBR.has(ch, &quot;\0 &quot;)) {</span>
+<span class="nc" id="L1667">                    int len = end - start;</span>
+<span class="nc" id="L1668">                    this.column += len;</span>
+<span class="nc" id="L1669">                    stream.write(text, start, len);</span>
+<span class="nc" id="L1670">                    start = end;</span>
+                }
+            }
+<span class="nc bnc" id="L1673" title="All 2 branches missed.">            if (ch != 0) {</span>
+<span class="nc bnc" id="L1674" title="All 2 branches missed.">                spaces = ch == ' ';</span>
+<span class="nc" id="L1675">                breaks = Constant.LINEBR.has(ch);</span>
+            }
+<span class="nc" id="L1677">            end++;</span>
+        }
+<span class="nc" id="L1679">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

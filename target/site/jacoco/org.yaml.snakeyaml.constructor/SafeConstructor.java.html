@@ -1,0 +1,580 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>SafeConstructor.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.constructor</a> &gt; <span class="el_source">SafeConstructor.java</span></div><h1>SafeConstructor.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.constructor;
+
+import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TimeZone;
+import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.external.biz.base64Coder.Base64Coder;
+import org.yaml.snakeyaml.nodes.MappingNode;
+import org.yaml.snakeyaml.nodes.Node;
+import org.yaml.snakeyaml.nodes.NodeId;
+import org.yaml.snakeyaml.nodes.NodeTuple;
+import org.yaml.snakeyaml.nodes.ScalarNode;
+import org.yaml.snakeyaml.nodes.SequenceNode;
+import org.yaml.snakeyaml.nodes.Tag;
+
+/**
+ * Construct standard Java classes
+ */
+public class SafeConstructor extends BaseConstructor {
+
+<span class="fc" id="L48">    public static final ConstructUndefined undefinedConstructor = new ConstructUndefined();</span>
+
+    public SafeConstructor() {
+<span class="nc" id="L51">    	this(new LoaderOptions());</span>
+<span class="nc" id="L52">    }</span>
+
+    public SafeConstructor(LoaderOptions loadingConfig) {
+<span class="fc" id="L55">        super(loadingConfig);</span>
+<span class="fc" id="L56">        this.yamlConstructors.put(Tag.NULL, new ConstructYamlNull());</span>
+<span class="fc" id="L57">        this.yamlConstructors.put(Tag.BOOL, new ConstructYamlBool());</span>
+<span class="fc" id="L58">        this.yamlConstructors.put(Tag.INT, new ConstructYamlInt());</span>
+<span class="fc" id="L59">        this.yamlConstructors.put(Tag.FLOAT, new ConstructYamlFloat());</span>
+<span class="fc" id="L60">        this.yamlConstructors.put(Tag.BINARY, new ConstructYamlBinary());</span>
+<span class="fc" id="L61">        this.yamlConstructors.put(Tag.TIMESTAMP, new ConstructYamlTimestamp());</span>
+<span class="fc" id="L62">        this.yamlConstructors.put(Tag.OMAP, new ConstructYamlOmap());</span>
+<span class="fc" id="L63">        this.yamlConstructors.put(Tag.PAIRS, new ConstructYamlPairs());</span>
+<span class="fc" id="L64">        this.yamlConstructors.put(Tag.SET, new ConstructYamlSet());</span>
+<span class="fc" id="L65">        this.yamlConstructors.put(Tag.STR, new ConstructYamlStr());</span>
+<span class="fc" id="L66">        this.yamlConstructors.put(Tag.SEQ, new ConstructYamlSeq());</span>
+<span class="fc" id="L67">        this.yamlConstructors.put(Tag.MAP, new ConstructYamlMap());</span>
+<span class="fc" id="L68">        this.yamlConstructors.put(null, undefinedConstructor);</span>
+<span class="fc" id="L69">        this.yamlClassConstructors.put(NodeId.scalar, undefinedConstructor);</span>
+<span class="fc" id="L70">        this.yamlClassConstructors.put(NodeId.sequence, undefinedConstructor);</span>
+<span class="fc" id="L71">        this.yamlClassConstructors.put(NodeId.mapping, undefinedConstructor);</span>
+<span class="fc" id="L72">    }</span>
+
+    protected void flattenMapping(MappingNode node) {
+        // perform merging only on nodes containing merge node(s)
+<span class="fc" id="L76">        processDuplicateKeys(node);</span>
+<span class="pc bpc" id="L77" title="1 of 2 branches missed.">        if (node.isMerged()) {</span>
+<span class="nc" id="L78">            node.setValue(mergeNode(node, true, new HashMap&lt;Object, Integer&gt;(),</span>
+<span class="nc" id="L79">                    new ArrayList&lt;NodeTuple&gt;()));</span>
+        }
+<span class="fc" id="L81">    }</span>
+
+    protected void processDuplicateKeys(MappingNode node) {
+<span class="fc" id="L84">        List&lt;NodeTuple&gt; nodeValue = node.getValue();</span>
+<span class="fc" id="L85">        Map&lt;Object, Integer&gt; keys = new HashMap&lt;Object, Integer&gt;(nodeValue.size());</span>
+<span class="fc" id="L86">        TreeSet&lt;Integer&gt; toRemove = new TreeSet&lt;Integer&gt;();</span>
+<span class="fc" id="L87">        int i = 0;</span>
+<span class="fc bfc" id="L88" title="All 2 branches covered.">        for (NodeTuple tuple : nodeValue) {</span>
+<span class="fc" id="L89">            Node keyNode = tuple.getKeyNode();</span>
+<span class="pc bpc" id="L90" title="1 of 2 branches missed.">            if (!keyNode.getTag().equals(Tag.MERGE)) {</span>
+<span class="fc" id="L91">                Object key = constructObject(keyNode);</span>
+<span class="fc bfc" id="L92" title="All 2 branches covered.">                if (key != null) {</span>
+                    try {
+<span class="fc" id="L94">                        key.hashCode();// check circular dependencies</span>
+<span class="pc" id="L95">                    } catch (Exception e) {</span>
+<span class="nc" id="L96">                        throw new ConstructorException(&quot;while constructing a mapping&quot;,</span>
+<span class="nc" id="L97">                                node.getStartMark(), &quot;found unacceptable key &quot; + key,</span>
+<span class="nc" id="L98">                                tuple.getKeyNode().getStartMark(), e);</span>
+                    }
+                }
+
+<span class="fc" id="L102">                Integer prevIndex = keys.put(key, i);</span>
+<span class="fc bfc" id="L103" title="All 2 branches covered.">                if (prevIndex != null) {</span>
+<span class="pc bpc" id="L104" title="1 of 2 branches missed.">                    if (!isAllowDuplicateKeys()) {</span>
+<span class="nc" id="L105">                        throw new DuplicateKeyException(node.getStartMark(), key,</span>
+<span class="nc" id="L106">                                tuple.getKeyNode().getStartMark());</span>
+                    }
+<span class="fc" id="L108">                    toRemove.add(prevIndex);</span>
+                }
+            }
+<span class="fc" id="L111">            i = i + 1;</span>
+        }
+
+<span class="fc" id="L114">        Iterator&lt;Integer&gt; indices2remove = toRemove.descendingIterator();</span>
+<span class="fc bfc" id="L115" title="All 2 branches covered.">        while (indices2remove.hasNext()) {</span>
+<span class="fc" id="L116">            nodeValue.remove(indices2remove.next().intValue());</span>
+        }
+<span class="fc" id="L118">    }</span>
+
+    /**
+     * Does merge for supplied mapping node.
+     *
+     * @param node
+     *            where to merge
+     * @param isPreffered
+     *            true if keys of node should take precedence over others...
+     * @param key2index
+     *            maps already merged keys to index from values
+     * @param values
+     *            collects merged NodeTuple
+     * @return list of the merged NodeTuple (to be set as value for the
+     *         MappingNode)
+     */
+    private List&lt;NodeTuple&gt; mergeNode(MappingNode node, boolean isPreffered,
+            Map&lt;Object, Integer&gt; key2index, List&lt;NodeTuple&gt; values) {
+<span class="nc" id="L136">        Iterator&lt;NodeTuple&gt; iter = node.getValue().iterator();</span>
+<span class="nc bnc" id="L137" title="All 2 branches missed.">        while (iter.hasNext()) {</span>
+<span class="nc" id="L138">            final NodeTuple nodeTuple = iter.next();</span>
+<span class="nc" id="L139">            final Node keyNode = nodeTuple.getKeyNode();</span>
+<span class="nc" id="L140">            final Node valueNode = nodeTuple.getValueNode();</span>
+<span class="nc bnc" id="L141" title="All 2 branches missed.">            if (keyNode.getTag().equals(Tag.MERGE)) {</span>
+<span class="nc" id="L142">                iter.remove();</span>
+<span class="nc bnc" id="L143" title="All 3 branches missed.">                switch (valueNode.getNodeId()) {</span>
+                case mapping:
+<span class="nc" id="L145">                    MappingNode mn = (MappingNode) valueNode;</span>
+<span class="nc" id="L146">                    mergeNode(mn, false, key2index, values);</span>
+<span class="nc" id="L147">                    break;</span>
+                case sequence:
+<span class="nc" id="L149">                    SequenceNode sn = (SequenceNode) valueNode;</span>
+<span class="nc" id="L150">                    List&lt;Node&gt; vals = sn.getValue();</span>
+<span class="nc bnc" id="L151" title="All 2 branches missed.">                    for (Node subnode : vals) {</span>
+<span class="nc bnc" id="L152" title="All 2 branches missed.">                        if (!(subnode instanceof MappingNode)) {</span>
+<span class="nc" id="L153">                            throw new ConstructorException(&quot;while constructing a mapping&quot;,</span>
+<span class="nc" id="L154">                                    node.getStartMark(),</span>
+<span class="nc" id="L155">                                    &quot;expected a mapping for merging, but found &quot;</span>
+<span class="nc" id="L156">                                            + subnode.getNodeId(),</span>
+<span class="nc" id="L157">                                    subnode.getStartMark());</span>
+                        }
+<span class="nc" id="L159">                        MappingNode mnode = (MappingNode) subnode;</span>
+<span class="nc" id="L160">                        mergeNode(mnode, false, key2index, values);</span>
+                    }
+<span class="nc" id="L162">                    break;</span>
+                default:
+<span class="nc" id="L164">                    throw new ConstructorException(&quot;while constructing a mapping&quot;,</span>
+<span class="nc" id="L165">                            node.getStartMark(),</span>
+<span class="nc" id="L166">                            &quot;expected a mapping or list of mappings for merging, but found &quot;</span>
+<span class="nc" id="L167">                                    + valueNode.getNodeId(),</span>
+<span class="nc" id="L168">                            valueNode.getStartMark());</span>
+                }
+<span class="nc" id="L170">            } else {</span>
+                // we need to construct keys to avoid duplications
+<span class="nc" id="L172">                Object key = constructObject(keyNode);</span>
+<span class="nc bnc" id="L173" title="All 2 branches missed.">                if (!key2index.containsKey(key)) { // 1st time merging key</span>
+<span class="nc" id="L174">                    values.add(nodeTuple);</span>
+                    // keep track where tuple for the key is
+<span class="nc" id="L176">                    key2index.put(key, values.size() - 1);</span>
+<span class="nc bnc" id="L177" title="All 2 branches missed.">                } else if (isPreffered) { // there is value for the key, but we</span>
+                                          // need to override it
+                                          // change value for the key using saved position
+<span class="nc" id="L180">                    values.set(key2index.get(key), nodeTuple);</span>
+                }
+            }
+        }
+<span class="nc" id="L184">        return values;</span>
+    }
+
+    @Override
+    protected void constructMapping2ndStep(MappingNode node, Map&lt;Object, Object&gt; mapping) {
+<span class="fc" id="L189">        flattenMapping(node);</span>
+<span class="fc" id="L190">        super.constructMapping2ndStep(node, mapping);</span>
+<span class="fc" id="L191">    }</span>
+
+    @Override
+    protected void constructSet2ndStep(MappingNode node, Set&lt;Object&gt; set) {
+<span class="fc" id="L195">        flattenMapping(node);</span>
+<span class="fc" id="L196">        super.constructSet2ndStep(node, set);</span>
+<span class="fc" id="L197">    }</span>
+
+<span class="fc" id="L199">    public class ConstructYamlNull extends AbstractConstruct {</span>
+        @Override
+        public Object construct(Node node) {
+<span class="fc bfc" id="L202" title="All 2 branches covered.">            if (node != null) constructScalar((ScalarNode) node);</span>
+<span class="fc" id="L203">            return null;</span>
+        }
+    }
+
+<span class="fc" id="L207">    private final static Map&lt;String, Boolean&gt; BOOL_VALUES = new HashMap&lt;String, Boolean&gt;();</span>
+    static {
+<span class="fc" id="L209">        BOOL_VALUES.put(&quot;yes&quot;, Boolean.TRUE);</span>
+<span class="fc" id="L210">        BOOL_VALUES.put(&quot;no&quot;, Boolean.FALSE);</span>
+<span class="fc" id="L211">        BOOL_VALUES.put(&quot;true&quot;, Boolean.TRUE);</span>
+<span class="fc" id="L212">        BOOL_VALUES.put(&quot;false&quot;, Boolean.FALSE);</span>
+<span class="fc" id="L213">        BOOL_VALUES.put(&quot;on&quot;, Boolean.TRUE);</span>
+<span class="fc" id="L214">        BOOL_VALUES.put(&quot;off&quot;, Boolean.FALSE);</span>
+    }
+
+<span class="fc" id="L217">    public class ConstructYamlBool extends AbstractConstruct {</span>
+        @Override
+        public Object construct(Node node) {
+<span class="fc" id="L220">            String val = (String) constructScalar((ScalarNode) node);</span>
+<span class="fc" id="L221">            return BOOL_VALUES.get(val.toLowerCase());</span>
+        }
+    }
+
+<span class="fc" id="L225">    public class ConstructYamlInt extends AbstractConstruct {</span>
+        @Override
+        public Object construct(Node node) {
+<span class="fc" id="L228">            String value = constructScalar((ScalarNode) node).toString().replaceAll(&quot;_&quot;, &quot;&quot;);</span>
+<span class="fc" id="L229">            int sign = +1;</span>
+<span class="fc" id="L230">            char first = value.charAt(0);</span>
+<span class="fc bfc" id="L231" title="All 2 branches covered.">            if (first == '-') {</span>
+<span class="fc" id="L232">                sign = -1;</span>
+<span class="fc" id="L233">                value = value.substring(1);</span>
+<span class="fc bfc" id="L234" title="All 2 branches covered.">            } else if (first == '+') {</span>
+<span class="fc" id="L235">                value = value.substring(1);</span>
+            }
+<span class="fc" id="L237">            int base = 10;</span>
+<span class="fc bfc" id="L238" title="All 2 branches covered.">            if (&quot;0&quot;.equals(value)) {</span>
+<span class="fc" id="L239">                return Integer.valueOf(0);</span>
+<span class="pc bpc" id="L240" title="1 of 2 branches missed.">            } else if (value.startsWith(&quot;0b&quot;)) {</span>
+<span class="nc" id="L241">                value = value.substring(2);</span>
+<span class="nc" id="L242">                base = 2;</span>
+<span class="pc bpc" id="L243" title="1 of 2 branches missed.">            } else if (value.startsWith(&quot;0x&quot;)) {</span>
+<span class="nc" id="L244">                value = value.substring(2);</span>
+<span class="nc" id="L245">                base = 16;</span>
+<span class="pc bfc" id="L246" title="All 2 branches covered.">            } else if (value.startsWith(&quot;0&quot;)) {</span>
+<span class="fc" id="L247">                value = value.substring(1);</span>
+<span class="fc" id="L248">                base = 8;</span>
+<span class="fc bfc" id="L249" title="All 2 branches covered.">            } else if (value.indexOf(':') != -1) {</span>
+<span class="fc" id="L250">                String[] digits = value.split(&quot;:&quot;);</span>
+<span class="fc" id="L251">                int bes = 1;</span>
+<span class="fc" id="L252">                int val = 0;</span>
+<span class="fc bfc" id="L253" title="All 2 branches covered.">                for (int i = 0, j = digits.length; i &lt; j; i++) {</span>
+<span class="fc" id="L254">                    val += Long.parseLong(digits[j - i - 1]) * bes;</span>
+<span class="fc" id="L255">                    bes *= 60;</span>
+                }
+<span class="fc" id="L257">                return createNumber(sign, String.valueOf(val), 10);</span>
+            } else {
+<span class="fc" id="L259">                return createNumber(sign, value, 10);</span>
+            }
+<span class="fc" id="L261">            return createNumber(sign, value, base);</span>
+        }
+    }
+
+<span class="fc" id="L265">    private static final int[][]  RADIX_MAX = new int[17][2];</span>
+    static {
+<span class="fc" id="L267">        int[] radixList = new int[] {2, 8, 10, 16};</span>
+<span class="fc bfc" id="L268" title="All 2 branches covered.">        for( int radix : radixList) {</span>
+<span class="fc" id="L269">            RADIX_MAX[radix] = new int[] { maxLen(Integer.MAX_VALUE,radix), maxLen(Long.MAX_VALUE,radix)};</span>
+        }
+    }
+    
+    private static int maxLen(final int max, final int radix) {
+<span class="fc" id="L274">    	return  Integer.toString(max,radix).length();</span>
+    }
+    private static int maxLen(final long max,final int radix) {
+<span class="fc" id="L277">    	return  Long.toString(max,radix).length();</span>
+    }
+    private Number createNumber(int sign, String number, int radix) {
+<span class="pc bpc" id="L280" title="1 of 2 branches missed.">        final int len = number != null ? number.length() : 0;</span>
+<span class="fc bfc" id="L281" title="All 2 branches covered.">        if (sign &lt; 0) {</span>
+<span class="fc" id="L282">            number = &quot;-&quot; + number;</span>
+        }
+<span class="pc bpc" id="L284" title="1 of 2 branches missed.">        final int[] maxArr = radix &lt; RADIX_MAX.length ?  RADIX_MAX[radix] : null;</span>
+<span class="pc bpc" id="L285" title="1 of 2 branches missed.">        if (maxArr != null) {</span>
+<span class="fc bfc" id="L286" title="All 2 branches covered.">            final boolean gtInt = len &gt;maxArr[0];</span>
+<span class="fc bfc" id="L287" title="All 2 branches covered.">            if (gtInt) {</span>
+<span class="fc bfc" id="L288" title="All 2 branches covered.">                if(len &gt; maxArr[1]) {</span>
+<span class="fc" id="L289">                    return new BigInteger(number, radix);</span>
+                }
+<span class="fc" id="L291">                return createLongOrBigInteger(number, radix);</span>
+            }
+        }
+        Number result;
+        try {
+<span class="fc" id="L296">            result = Integer.valueOf(number, radix);</span>
+<span class="fc" id="L297">        } catch (NumberFormatException e) {</span>
+<span class="fc" id="L298">            result = createLongOrBigInteger(number, radix);</span>
+        }
+<span class="fc" id="L300">        return result;</span>
+    }
+
+    protected static Number createLongOrBigInteger(final String number,final  int radix) {
+        try {
+<span class="fc" id="L305">            return Long.valueOf(number, radix);</span>
+<span class="nc" id="L306">        } catch (NumberFormatException e1) {</span>
+<span class="nc" id="L307">            return  new BigInteger(number, radix);</span>
+        }
+    }
+
+<span class="fc" id="L311">    public class ConstructYamlFloat extends AbstractConstruct {</span>
+        @Override
+        public Object construct(Node node) {
+<span class="fc" id="L314">            String value = constructScalar((ScalarNode) node).toString().replaceAll(&quot;_&quot;, &quot;&quot;);</span>
+<span class="fc" id="L315">            int sign = +1;</span>
+<span class="fc" id="L316">            char first = value.charAt(0);</span>
+<span class="fc bfc" id="L317" title="All 2 branches covered.">            if (first == '-') {</span>
+<span class="fc" id="L318">                sign = -1;</span>
+<span class="fc" id="L319">                value = value.substring(1);</span>
+<span class="fc bfc" id="L320" title="All 2 branches covered.">            } else if (first == '+') {</span>
+<span class="fc" id="L321">                value = value.substring(1);</span>
+            }
+<span class="fc" id="L323">            String valLower = value.toLowerCase();</span>
+<span class="pc bpc" id="L324" title="1 of 2 branches missed.">            if (&quot;.inf&quot;.equals(valLower)) {</span>
+<span class="nc" id="L325">                return Double</span>
+<span class="nc bnc" id="L326" title="All 2 branches missed.">                        .valueOf(sign == -1 ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);</span>
+<span class="pc bpc" id="L327" title="1 of 2 branches missed.">            } else if (&quot;.nan&quot;.equals(valLower)) {</span>
+<span class="nc" id="L328">                return Double.valueOf(Double.NaN);</span>
+<span class="pc bpc" id="L329" title="1 of 2 branches missed.">            } else if (value.indexOf(':') != -1) {</span>
+<span class="nc" id="L330">                String[] digits = value.split(&quot;:&quot;);</span>
+<span class="nc" id="L331">                int bes = 1;</span>
+<span class="nc" id="L332">                double val = 0.0;</span>
+<span class="nc bnc" id="L333" title="All 2 branches missed.">                for (int i = 0, j = digits.length; i &lt; j; i++) {</span>
+<span class="nc" id="L334">                    val += Double.parseDouble(digits[j - i - 1]) * bes;</span>
+<span class="nc" id="L335">                    bes *= 60;</span>
+                }
+<span class="nc" id="L337">                return Double.valueOf(sign * val);</span>
+            } else {
+<span class="fc" id="L339">                Double d = Double.valueOf(value);</span>
+<span class="fc" id="L340">                return Double.valueOf(d.doubleValue() * sign);</span>
+            }
+        }
+    }
+
+<span class="fc" id="L345">    public class ConstructYamlBinary extends AbstractConstruct {</span>
+        @Override
+        public Object construct(Node node) {
+            // Ignore white spaces for base64 encoded scalar
+<span class="nc" id="L349">            String noWhiteSpaces = constructScalar((ScalarNode) node).toString().replaceAll(&quot;\\s&quot;,</span>
+<span class="nc" id="L350">                    &quot;&quot;);</span>
+<span class="nc" id="L351">            byte[] decoded = Base64Coder.decode(noWhiteSpaces.toCharArray());</span>
+<span class="nc" id="L352">            return decoded;</span>
+        }
+    }
+
+<span class="fc" id="L356">    private final static Pattern TIMESTAMP_REGEXP = Pattern.compile(</span>
+<span class="fc" id="L357">            &quot;^([0-9][0-9][0-9][0-9])-([0-9][0-9]?)-([0-9][0-9]?)(?:(?:[Tt]|[ \t]+)([0-9][0-9]?):([0-9][0-9]):([0-9][0-9])(?:\\.([0-9]*))?(?:[ \t]*(?:Z|([-+][0-9][0-9]?)(?::([0-9][0-9])?)?))?)?$&quot;);</span>
+<span class="fc" id="L358">    private final static Pattern YMD_REGEXP = Pattern</span>
+<span class="fc" id="L359">            .compile(&quot;^([0-9][0-9][0-9][0-9])-([0-9][0-9]?)-([0-9][0-9]?)$&quot;);</span>
+
+<span class="fc" id="L361">    public static class ConstructYamlTimestamp extends AbstractConstruct {</span>
+        private Calendar calendar;
+
+        public Calendar getCalendar() {
+<span class="nc" id="L365">            return calendar;</span>
+        }
+
+        @Override
+        public Object construct(Node node) {
+<span class="nc" id="L370">            ScalarNode scalar = (ScalarNode) node;</span>
+<span class="nc" id="L371">            String nodeValue = scalar.getValue();</span>
+<span class="nc" id="L372">            Matcher match = YMD_REGEXP.matcher(nodeValue);</span>
+<span class="nc bnc" id="L373" title="All 2 branches missed.">            if (match.matches()) {</span>
+<span class="nc" id="L374">                String year_s = match.group(1);</span>
+<span class="nc" id="L375">                String month_s = match.group(2);</span>
+<span class="nc" id="L376">                String day_s = match.group(3);</span>
+<span class="nc" id="L377">                calendar = Calendar.getInstance(TimeZone.getTimeZone(&quot;UTC&quot;));</span>
+<span class="nc" id="L378">                calendar.clear();</span>
+<span class="nc" id="L379">                calendar.set(Calendar.YEAR, Integer.parseInt(year_s));</span>
+                // Java's months are zero-based...
+<span class="nc" id="L381">                calendar.set(Calendar.MONTH, Integer.parseInt(month_s) - 1); // x</span>
+<span class="nc" id="L382">                calendar.set(Calendar.DAY_OF_MONTH, Integer.parseInt(day_s));</span>
+<span class="nc" id="L383">                return calendar.getTime();</span>
+            } else {
+<span class="nc" id="L385">                match = TIMESTAMP_REGEXP.matcher(nodeValue);</span>
+<span class="nc bnc" id="L386" title="All 2 branches missed.">                if (!match.matches()) {</span>
+<span class="nc" id="L387">                    throw new YAMLException(&quot;Unexpected timestamp: &quot; + nodeValue);</span>
+                }
+<span class="nc" id="L389">                String year_s = match.group(1);</span>
+<span class="nc" id="L390">                String month_s = match.group(2);</span>
+<span class="nc" id="L391">                String day_s = match.group(3);</span>
+<span class="nc" id="L392">                String hour_s = match.group(4);</span>
+<span class="nc" id="L393">                String min_s = match.group(5);</span>
+                // seconds and milliseconds
+<span class="nc" id="L395">                String seconds = match.group(6);</span>
+<span class="nc" id="L396">                String millis = match.group(7);</span>
+<span class="nc bnc" id="L397" title="All 2 branches missed.">                if (millis != null) {</span>
+<span class="nc" id="L398">                    seconds = seconds + &quot;.&quot; + millis;</span>
+                }
+<span class="nc" id="L400">                double fractions = Double.parseDouble(seconds);</span>
+<span class="nc" id="L401">                int sec_s = (int) Math.round(Math.floor(fractions));</span>
+<span class="nc" id="L402">                int usec = (int) Math.round((fractions - sec_s) * 1000);</span>
+                // timezone
+<span class="nc" id="L404">                String timezoneh_s = match.group(8);</span>
+<span class="nc" id="L405">                String timezonem_s = match.group(9);</span>
+                TimeZone timeZone;
+<span class="nc bnc" id="L407" title="All 2 branches missed.">                if (timezoneh_s != null) {</span>
+<span class="nc bnc" id="L408" title="All 2 branches missed.">                    String time = timezonem_s != null ? &quot;:&quot; + timezonem_s : &quot;00&quot;;</span>
+<span class="nc" id="L409">                    timeZone = TimeZone.getTimeZone(&quot;GMT&quot; + timezoneh_s + time);</span>
+<span class="nc" id="L410">                } else {</span>
+                    // no time zone provided
+<span class="nc" id="L412">                    timeZone = TimeZone.getTimeZone(&quot;UTC&quot;);</span>
+                }
+<span class="nc" id="L414">                calendar = Calendar.getInstance(timeZone);</span>
+<span class="nc" id="L415">                calendar.set(Calendar.YEAR, Integer.parseInt(year_s));</span>
+                // Java's months are zero-based...
+<span class="nc" id="L417">                calendar.set(Calendar.MONTH, Integer.parseInt(month_s) - 1);</span>
+<span class="nc" id="L418">                calendar.set(Calendar.DAY_OF_MONTH, Integer.parseInt(day_s));</span>
+<span class="nc" id="L419">                calendar.set(Calendar.HOUR_OF_DAY, Integer.parseInt(hour_s));</span>
+<span class="nc" id="L420">                calendar.set(Calendar.MINUTE, Integer.parseInt(min_s));</span>
+<span class="nc" id="L421">                calendar.set(Calendar.SECOND, sec_s);</span>
+<span class="nc" id="L422">                calendar.set(Calendar.MILLISECOND, usec);</span>
+<span class="nc" id="L423">                return calendar.getTime();</span>
+            }
+        }
+    }
+
+<span class="fc" id="L428">    public class ConstructYamlOmap extends AbstractConstruct {</span>
+        @Override
+        public Object construct(Node node) {
+            // Note: we do not check for duplicate keys, because it's too
+            // CPU-expensive.
+<span class="nc" id="L433">            Map&lt;Object, Object&gt; omap = new LinkedHashMap&lt;Object, Object&gt;();</span>
+<span class="nc bnc" id="L434" title="All 2 branches missed.">            if (!(node instanceof SequenceNode)) {</span>
+<span class="nc" id="L435">                throw new ConstructorException(&quot;while constructing an ordered map&quot;,</span>
+<span class="nc" id="L436">                        node.getStartMark(), &quot;expected a sequence, but found &quot; + node.getNodeId(),</span>
+<span class="nc" id="L437">                        node.getStartMark());</span>
+            }
+<span class="nc" id="L439">            SequenceNode snode = (SequenceNode) node;</span>
+<span class="nc bnc" id="L440" title="All 2 branches missed.">            for (Node subnode : snode.getValue()) {</span>
+<span class="nc bnc" id="L441" title="All 2 branches missed.">                if (!(subnode instanceof MappingNode)) {</span>
+<span class="nc" id="L442">                    throw new ConstructorException(&quot;while constructing an ordered map&quot;,</span>
+<span class="nc" id="L443">                            node.getStartMark(),</span>
+<span class="nc" id="L444">                            &quot;expected a mapping of length 1, but found &quot; + subnode.getNodeId(),</span>
+<span class="nc" id="L445">                            subnode.getStartMark());</span>
+                }
+<span class="nc" id="L447">                MappingNode mnode = (MappingNode) subnode;</span>
+<span class="nc bnc" id="L448" title="All 2 branches missed.">                if (mnode.getValue().size() != 1) {</span>
+<span class="nc" id="L449">                    throw new ConstructorException(&quot;while constructing an ordered map&quot;,</span>
+<span class="nc" id="L450">                            node.getStartMark(), &quot;expected a single mapping item, but found &quot;</span>
+<span class="nc" id="L451">                                    + mnode.getValue().size() + &quot; items&quot;,</span>
+<span class="nc" id="L452">                            mnode.getStartMark());</span>
+                }
+<span class="nc" id="L454">                Node keyNode = mnode.getValue().get(0).getKeyNode();</span>
+<span class="nc" id="L455">                Node valueNode = mnode.getValue().get(0).getValueNode();</span>
+<span class="nc" id="L456">                Object key = constructObject(keyNode);</span>
+<span class="nc" id="L457">                Object value = constructObject(valueNode);</span>
+<span class="nc" id="L458">                omap.put(key, value);</span>
+            }
+<span class="nc" id="L460">            return omap;</span>
+        }
+    }
+
+<span class="fc" id="L464">    public class ConstructYamlPairs extends AbstractConstruct {</span>
+        @Override
+        public Object construct(Node node) {
+            // Note: we do not check for duplicate keys, because it's too
+            // CPU-expensive.
+<span class="nc bnc" id="L469" title="All 2 branches missed.">            if (!(node instanceof SequenceNode)) {</span>
+<span class="nc" id="L470">                throw new ConstructorException(&quot;while constructing pairs&quot;, node.getStartMark(),</span>
+<span class="nc" id="L471">                        &quot;expected a sequence, but found &quot; + node.getNodeId(), node.getStartMark());</span>
+            }
+<span class="nc" id="L473">            SequenceNode snode = (SequenceNode) node;</span>
+<span class="nc" id="L474">            List&lt;Object[]&gt; pairs = new ArrayList&lt;Object[]&gt;(snode.getValue().size());</span>
+<span class="nc bnc" id="L475" title="All 2 branches missed.">            for (Node subnode : snode.getValue()) {</span>
+<span class="nc bnc" id="L476" title="All 2 branches missed.">                if (!(subnode instanceof MappingNode)) {</span>
+<span class="nc" id="L477">                    throw new ConstructorException(&quot;while constructingpairs&quot;, node.getStartMark(),</span>
+<span class="nc" id="L478">                            &quot;expected a mapping of length 1, but found &quot; + subnode.getNodeId(),</span>
+<span class="nc" id="L479">                            subnode.getStartMark());</span>
+                }
+<span class="nc" id="L481">                MappingNode mnode = (MappingNode) subnode;</span>
+<span class="nc bnc" id="L482" title="All 2 branches missed.">                if (mnode.getValue().size() != 1) {</span>
+<span class="nc" id="L483">                    throw new ConstructorException(&quot;while constructing pairs&quot;, node.getStartMark(),</span>
+<span class="nc" id="L484">                            &quot;expected a single mapping item, but found &quot; + mnode.getValue().size()</span>
+                                    + &quot; items&quot;,
+<span class="nc" id="L486">                            mnode.getStartMark());</span>
+                }
+<span class="nc" id="L488">                Node keyNode = mnode.getValue().get(0).getKeyNode();</span>
+<span class="nc" id="L489">                Node valueNode = mnode.getValue().get(0).getValueNode();</span>
+<span class="nc" id="L490">                Object key = constructObject(keyNode);</span>
+<span class="nc" id="L491">                Object value = constructObject(valueNode);</span>
+<span class="nc" id="L492">                pairs.add(new Object[] { key, value });</span>
+            }
+<span class="nc" id="L494">            return pairs;</span>
+        }
+    }
+
+<span class="fc" id="L498">    public class ConstructYamlSet implements Construct {</span>
+        @Override
+        public Object construct(Node node) {
+<span class="nc bnc" id="L501" title="All 2 branches missed.">            if (node.isTwoStepsConstruction()) {</span>
+<span class="nc bnc" id="L502" title="All 2 branches missed.">                return (constructedObjects.containsKey(node) ? constructedObjects.get(node)</span>
+<span class="nc" id="L503">                        : createDefaultSet(((MappingNode) node).getValue().size()));</span>
+            } else {
+<span class="nc" id="L505">                return constructSet((MappingNode) node);</span>
+            }
+        }
+
+        @Override
+        @SuppressWarnings(&quot;unchecked&quot;)
+        public void construct2ndStep(Node node, Object object) {
+<span class="nc bnc" id="L512" title="All 2 branches missed.">            if (node.isTwoStepsConstruction()) {</span>
+<span class="nc" id="L513">                constructSet2ndStep((MappingNode) node, (Set&lt;Object&gt;) object);</span>
+<span class="nc" id="L514">            } else {</span>
+<span class="nc" id="L515">                throw new YAMLException(&quot;Unexpected recursive set structure. Node: &quot; + node);</span>
+            }
+<span class="nc" id="L517">        }</span>
+    }
+
+<span class="fc" id="L520">    public class ConstructYamlStr extends AbstractConstruct {</span>
+        @Override
+        public Object construct(Node node) {
+<span class="fc" id="L523">            return constructScalar((ScalarNode) node);</span>
+        }
+    }
+
+<span class="fc" id="L527">    public class ConstructYamlSeq implements Construct {</span>
+        @Override
+        public Object construct(Node node) {
+<span class="fc" id="L530">            SequenceNode seqNode = (SequenceNode) node;</span>
+<span class="fc bfc" id="L531" title="All 2 branches covered.">            if (node.isTwoStepsConstruction()) {</span>
+<span class="fc" id="L532">                return newList(seqNode);</span>
+            } else {
+<span class="fc" id="L534">                return constructSequence(seqNode);</span>
+            }
+        }
+
+        @Override
+        @SuppressWarnings(&quot;unchecked&quot;)
+        public void construct2ndStep(Node node, Object data) {
+<span class="pc bpc" id="L541" title="1 of 2 branches missed.">            if (node.isTwoStepsConstruction()) {</span>
+<span class="fc" id="L542">                constructSequenceStep2((SequenceNode) node, (List&lt;Object&gt;) data);</span>
+<span class="fc" id="L543">            } else {</span>
+<span class="nc" id="L544">                throw new YAMLException(&quot;Unexpected recursive sequence structure. Node: &quot; + node);</span>
+            }
+<span class="fc" id="L546">        }</span>
+    }
+
+<span class="fc" id="L549">    public class ConstructYamlMap implements Construct {</span>
+        @Override
+        public Object construct(Node node) {
+<span class="fc" id="L552">            MappingNode mnode = (MappingNode) node;</span>
+<span class="pc bpc" id="L553" title="1 of 2 branches missed.">            if (node.isTwoStepsConstruction()) {</span>
+<span class="nc" id="L554">                return createDefaultMap(mnode.getValue().size());</span>
+            } else {
+<span class="fc" id="L556">                return constructMapping(mnode);</span>
+            }
+        }
+
+        @Override
+        @SuppressWarnings(&quot;unchecked&quot;)
+        public void construct2ndStep(Node node, Object object) {
+<span class="nc bnc" id="L563" title="All 2 branches missed.">            if (node.isTwoStepsConstruction()) {</span>
+<span class="nc" id="L564">                constructMapping2ndStep((MappingNode) node, (Map&lt;Object, Object&gt;) object);</span>
+<span class="nc" id="L565">            } else {</span>
+<span class="nc" id="L566">                throw new YAMLException(&quot;Unexpected recursive mapping structure. Node: &quot; + node);</span>
+            }
+<span class="nc" id="L568">        }</span>
+    }
+
+<span class="fc" id="L571">    public static final class ConstructUndefined extends AbstractConstruct {</span>
+        @Override
+        public Object construct(Node node) {
+<span class="nc" id="L574">            throw new ConstructorException(null, null,</span>
+<span class="nc" id="L575">                    &quot;could not determine a constructor for the tag &quot; + node.getTag(),</span>
+<span class="nc" id="L576">                    node.getStartMark());</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

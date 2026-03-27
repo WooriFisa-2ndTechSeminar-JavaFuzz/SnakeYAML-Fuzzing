@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Token.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.tokens</a> &gt; <span class="el_source">Token.java</span></div><h1>Token.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.tokens;
+
+import org.yaml.snakeyaml.error.Mark;
+import org.yaml.snakeyaml.error.YAMLException;
+
+public abstract class Token {
+<span class="fc" id="L22">    public enum ID {</span>
+<span class="fc" id="L23">        Alias(&quot;&lt;alias&gt;&quot;),</span>
+<span class="fc" id="L24">        Anchor(&quot;&lt;anchor&gt;&quot;),</span>
+<span class="fc" id="L25">        BlockEnd(&quot;&lt;block end&gt;&quot;),</span>
+<span class="fc" id="L26">        BlockEntry(&quot;-&quot;),</span>
+<span class="fc" id="L27">        BlockMappingStart(&quot;&lt;block mapping start&gt;&quot;),</span>
+<span class="fc" id="L28">        BlockSequenceStart(&quot;&lt;block sequence start&gt;&quot;),</span>
+<span class="fc" id="L29">        Directive(&quot;&lt;directive&gt;&quot;),</span>
+<span class="fc" id="L30">        DocumentEnd(&quot;&lt;document end&gt;&quot;),</span>
+<span class="fc" id="L31">        DocumentStart(&quot;&lt;document start&gt;&quot;),</span>
+<span class="fc" id="L32">        FlowEntry(&quot;,&quot;),</span>
+<span class="fc" id="L33">        FlowMappingEnd(&quot;}&quot;),</span>
+<span class="fc" id="L34">        FlowMappingStart(&quot;{&quot;),</span>
+<span class="fc" id="L35">        FlowSequenceEnd(&quot;]&quot;),</span>
+<span class="fc" id="L36">        FlowSequenceStart(&quot;[&quot;),</span>
+<span class="fc" id="L37">        Key(&quot;?&quot;),</span>
+<span class="fc" id="L38">        Scalar(&quot;&lt;scalar&gt;&quot;),</span>
+<span class="fc" id="L39">        StreamEnd(&quot;&lt;stream end&gt;&quot;),</span>
+<span class="fc" id="L40">        StreamStart(&quot;&lt;stream start&gt;&quot;),</span>
+<span class="fc" id="L41">        Tag(&quot;&lt;tag&gt;&quot;),</span>
+<span class="fc" id="L42">        Value(&quot;:&quot;),</span>
+<span class="fc" id="L43">        Whitespace(&quot;&lt;whitespace&gt;&quot;),</span>
+<span class="fc" id="L44">        Comment(&quot;#&quot;),</span>
+<span class="fc" id="L45">        Error(&quot;&lt;error&gt;&quot;);</span>
+
+        private final String description;
+
+<span class="fc" id="L49">        ID(String s) {</span>
+<span class="fc" id="L50">            description = s;</span>
+<span class="fc" id="L51">        }</span>
+
+        @Override
+        public String toString() {
+<span class="fc" id="L55">            return description;</span>
+        }
+    }
+
+    private final Mark startMark;
+    private final Mark endMark;
+
+<span class="fc" id="L62">    public Token(Mark startMark, Mark endMark) {</span>
+<span class="pc bpc" id="L63" title="2 of 4 branches missed.">        if (startMark == null || endMark == null) {</span>
+<span class="nc" id="L64">            throw new YAMLException(&quot;Token requires marks.&quot;);</span>
+        }
+<span class="fc" id="L66">        this.startMark = startMark;</span>
+<span class="fc" id="L67">        this.endMark = endMark;</span>
+<span class="fc" id="L68">    }</span>
+
+    public Mark getStartMark() {
+<span class="fc" id="L71">        return startMark;</span>
+    }
+
+    public Mark getEndMark() {
+<span class="fc" id="L75">        return endMark;</span>
+    }
+
+    /**
+     * For error reporting.
+     * 
+     * @see &quot;class variable 'id' in PyYAML&quot;
+     * @return ID of this token
+     */
+    public abstract Token.ID getTokenId();
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>StreamReader.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.reader</a> &gt; <span class="el_source">StreamReader.java</span></div><h1>StreamReader.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.reader;
+
+import java.io.IOException;
+import java.io.Reader;
+import java.io.StringReader;
+import java.util.Arrays;
+
+import org.yaml.snakeyaml.error.Mark;
+import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.scanner.Constant;
+
+/**
+ * Reader: checks if code points are in allowed range. Returns '\0' when end of
+ * data has been reached.
+ */
+public class StreamReader {
+    private String name;
+    private final Reader stream;
+    /**
+     * Read data (as a moving window for input stream)
+     */
+    private int[] dataWindow;
+
+    /**
+     * Real length of the data in dataWindow
+     */
+    private int dataLength;
+
+    /**
+     * The variable points to the current position in the data array
+     */
+<span class="fc" id="L47">    private int pointer = 0;</span>
+    private boolean eof;
+    /**
+     * index is only required to implement 1024 key length restriction
+     * http://yaml.org/spec/1.1/#simple key/
+     * It must count code points, but it counts characters (to be fixed)
+     */
+<span class="fc" id="L54">    private int index = 0; // in code points</span>
+<span class="fc" id="L55">    private int line = 0;</span>
+<span class="fc" id="L56">    private int column = 0; //in code points</span>
+    private char[] buffer; // temp buffer for one read operation (to avoid
+                          // creating the array in stack)
+
+    private static final int BUFFER_SIZE = 1025;
+
+    public StreamReader(String stream) {
+<span class="fc" id="L63">        this(new StringReader(stream));</span>
+<span class="fc" id="L64">        this.name = &quot;'string'&quot;;</span>
+<span class="fc" id="L65">    }</span>
+
+<span class="fc" id="L67">    public StreamReader(Reader reader) {</span>
+<span class="fc" id="L68">        this.name = &quot;'reader'&quot;;</span>
+<span class="fc" id="L69">        this.dataWindow = new int[0];</span>
+<span class="fc" id="L70">        this.dataLength = 0;</span>
+<span class="fc" id="L71">        this.stream = reader;</span>
+<span class="fc" id="L72">        this.eof = false;</span>
+<span class="fc" id="L73">        this.buffer = new char[BUFFER_SIZE];</span>
+<span class="fc" id="L74">    }</span>
+
+    public static boolean isPrintable(final String data) {
+<span class="nc" id="L77">        final int length = data.length();</span>
+<span class="nc bnc" id="L78" title="All 2 branches missed.">        for (int offset = 0; offset &lt; length; ) {</span>
+<span class="nc" id="L79">            final int codePoint = data.codePointAt(offset);</span>
+
+<span class="nc bnc" id="L81" title="All 2 branches missed.">            if (!isPrintable(codePoint)) {</span>
+<span class="nc" id="L82">                return false;</span>
+            }
+
+<span class="nc" id="L85">            offset += Character.charCount(codePoint);</span>
+        }
+
+<span class="nc" id="L88">        return true;</span>
+    }
+
+    public static boolean isPrintable(final int c) {
+<span class="pc bpc" id="L92" title="1 of 14 branches missed.">        return (c &gt;= 0x20 &amp;&amp; c &lt;= 0x7E) || c == 0x9 || c == 0xA || c == 0xD || c == 0x85</span>
+<span class="fc bfc" id="L93" title="All 8 branches covered.">                || (c &gt;= 0xA0 &amp;&amp; c &lt;= 0xD7FF) || (c &gt;= 0xE000 &amp;&amp; c &lt;= 0xFFFD)</span>
+<span class="fc bfc" id="L94" title="All 2 branches covered.">                || (c &gt;= 0x10000 &amp;&amp; c &lt;= 0x10FFFF);</span>
+    }
+
+    public Mark getMark() {
+<span class="fc" id="L98">        return new Mark(name, this.index, this.line, this.column, this.dataWindow, this.pointer);</span>
+    }
+
+    public void forward() {
+<span class="fc" id="L102">        forward(1);</span>
+<span class="fc" id="L103">    }</span>
+
+    /**
+     * read the next length characters and move the pointer.
+     * if the last character is high surrogate one more character will be read
+     *
+     * @param length amount of characters to move forward
+     */
+    public void forward(int length) {
+<span class="fc bfc" id="L112" title="All 4 branches covered.">        for (int i = 0; i &lt; length &amp;&amp; ensureEnoughData(); i++) {</span>
+<span class="fc" id="L113">        int c = dataWindow[pointer++];</span>
+<span class="fc" id="L114">        this.index++;</span>
+<span class="fc bfc" id="L115" title="All 2 branches covered.">        if (Constant.LINEBR.has(c)</span>
+<span class="fc bfc" id="L116" title="All 6 branches covered.">                || (c == '\r' &amp;&amp; (ensureEnoughData() &amp;&amp; dataWindow[pointer] != '\n'))) {</span>
+<span class="fc" id="L117">                this.line++;</span>
+<span class="fc" id="L118">                this.column = 0;</span>
+<span class="pc bpc" id="L119" title="1 of 2 branches missed.">            } else if (c != 0xFEFF) {</span>
+<span class="fc" id="L120">                this.column++;</span>
+            }
+        }
+<span class="fc" id="L123">    }</span>
+
+    public int peek() {
+<span class="fc bfc" id="L126" title="All 2 branches covered.">        return (ensureEnoughData()) ? dataWindow[pointer] : '\0';</span>
+    }
+
+    /**
+     * Peek the next index-th code point
+     *
+     * @param index to peek
+     * @return the next index-th code point
+     */
+    public int peek(int index) {
+<span class="fc bfc" id="L136" title="All 2 branches covered.">        return (ensureEnoughData(index)) ? dataWindow[pointer + index] : '\0';</span>
+    }
+
+    /**
+     * peek the next length code points
+     *
+     * @param length amount of the characters to peek
+     * @return the next length code points
+     */
+    public String prefix(int length) {
+<span class="fc bfc" id="L146" title="All 2 branches covered.">        if (length == 0) {</span>
+<span class="fc" id="L147">            return &quot;&quot;;</span>
+<span class="fc bfc" id="L148" title="All 2 branches covered.">        } else if (ensureEnoughData(length)) {</span>
+<span class="fc" id="L149">            return new String(this.dataWindow, pointer, length);</span>
+        } else {
+<span class="fc" id="L151">            return new String(this.dataWindow, pointer,</span>
+<span class="fc" id="L152">                    Math.min(length, dataLength - pointer));</span>
+        }
+    }
+
+    /**
+     * prefix(length) immediately followed by forward(length)
+     * @param length amount of characters to get
+     * @return the next length code points
+     */
+    public String prefixForward(int length) {
+<span class="fc" id="L162">        final String prefix = prefix(length);</span>
+<span class="fc" id="L163">        this.pointer += length;</span>
+<span class="fc" id="L164">        this.index += length;</span>
+        // prefix never contains new line characters
+<span class="fc" id="L166">        this.column += length;</span>
+<span class="fc" id="L167">        return prefix;</span>
+    }
+
+    private boolean ensureEnoughData() {
+<span class="fc" id="L171">        return ensureEnoughData(0);</span>
+    }
+
+    private boolean ensureEnoughData(int size) {
+<span class="fc bfc" id="L175" title="All 4 branches covered.">        if (!eof &amp;&amp; pointer + size &gt;= dataLength) {</span>
+<span class="fc" id="L176">            update();</span>
+        }
+<span class="fc bfc" id="L178" title="All 2 branches covered.">        return (this.pointer + size) &lt; dataLength;</span>
+    }
+
+    private void update() {
+        try {
+<span class="fc" id="L183">            int read = stream.read(buffer, 0, BUFFER_SIZE - 1);</span>
+<span class="fc bfc" id="L184" title="All 2 branches covered.">            if (read &gt; 0) {</span>
+<span class="fc" id="L185">                int cpIndex = (dataLength - pointer);</span>
+<span class="fc" id="L186">                dataWindow = Arrays.copyOfRange(dataWindow, pointer, dataLength + read);</span>
+
+<span class="pc bpc" id="L188" title="1 of 2 branches missed.">                if (Character.isHighSurrogate(buffer[read - 1])) {</span>
+<span class="nc bnc" id="L189" title="All 2 branches missed.">                    if (stream.read(buffer, read, 1) == -1) {</span>
+<span class="nc" id="L190">                        eof = true;</span>
+<span class="nc" id="L191">                    } else {</span>
+<span class="nc" id="L192">                        read++;</span>
+                    }
+                }
+
+<span class="fc" id="L196">                int nonPrintable = ' ';</span>
+<span class="fc bfc" id="L197" title="All 2 branches covered.">                for (int i = 0; i &lt; read; cpIndex++) {</span>
+<span class="fc" id="L198">                    int codePoint = Character.codePointAt(buffer, i);</span>
+<span class="fc" id="L199">                    dataWindow[cpIndex] = codePoint;</span>
+<span class="fc bfc" id="L200" title="All 2 branches covered.">                    if (isPrintable(codePoint)) {</span>
+<span class="fc" id="L201">                        i += Character.charCount(codePoint);</span>
+<span class="fc" id="L202">                    } else {</span>
+<span class="fc" id="L203">                        nonPrintable = codePoint;</span>
+<span class="fc" id="L204">                        i = read;</span>
+                    }
+                }
+
+<span class="fc" id="L208">                dataLength = cpIndex;</span>
+<span class="fc" id="L209">                pointer = 0;</span>
+<span class="fc bfc" id="L210" title="All 2 branches covered.">                if (nonPrintable != ' ') {</span>
+<span class="fc" id="L211">                    throw new ReaderException(name, cpIndex - 1, nonPrintable,</span>
+<span class="fc" id="L212">                            &quot;special characters are not allowed&quot;);</span>
+                }
+            } else {
+<span class="fc" id="L215">                eof = true;</span>
+            }
+<span class="pc" id="L217">        } catch (IOException ioe) {</span>
+<span class="nc" id="L218">            throw new YAMLException(ioe);</span>
+        }
+<span class="fc" id="L220">    }</span>
+
+
+    public int getColumn() {
+<span class="fc" id="L224">        return column;</span>
+    }
+
+    /**
+     * @return current position as number (in characters) from the beginning of the stream
+     */
+    public int getIndex() {
+<span class="fc" id="L231">        return index;</span>
+    }
+
+    public int getLine() {
+<span class="fc" id="L235">        return line;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

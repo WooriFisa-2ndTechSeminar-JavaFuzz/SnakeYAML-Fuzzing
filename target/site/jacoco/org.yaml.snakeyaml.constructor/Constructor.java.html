@@ -1,0 +1,686 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Constructor.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.constructor</a> &gt; <span class="el_source">Constructor.java</span></div><h1>Constructor.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.constructor;
+
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Collection;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.TypeDescription;
+import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.introspector.Property;
+import org.yaml.snakeyaml.nodes.MappingNode;
+import org.yaml.snakeyaml.nodes.Node;
+import org.yaml.snakeyaml.nodes.NodeId;
+import org.yaml.snakeyaml.nodes.NodeTuple;
+import org.yaml.snakeyaml.nodes.ScalarNode;
+import org.yaml.snakeyaml.nodes.SequenceNode;
+import org.yaml.snakeyaml.nodes.Tag;
+import org.yaml.snakeyaml.util.EnumUtils;
+
+/**
+ * Construct a custom Java instance.
+ */
+public class Constructor extends SafeConstructor {
+
+    public Constructor() {
+<span class="fc" id="L48">        this(Object.class);</span>
+<span class="fc" id="L49">    }</span>
+
+    public Constructor(LoaderOptions loadingConfig) {
+<span class="nc" id="L52">        this(Object.class, loadingConfig);</span>
+<span class="nc" id="L53">    }</span>
+
+    /**
+     * Create Constructor for the specified class as the root.
+     *
+     * @param theRoot
+     *            - the class (usually JavaBean) to be constructed
+     */
+    public Constructor(Class&lt;? extends Object&gt; theRoot) {
+<span class="fc" id="L62">        this(new TypeDescription(checkRoot(theRoot)));</span>
+<span class="fc" id="L63">    }</span>
+
+    public Constructor(Class&lt;? extends Object&gt; theRoot, LoaderOptions loadingConfig) {
+<span class="nc" id="L66">        this(new TypeDescription(checkRoot(theRoot)), loadingConfig);</span>
+<span class="nc" id="L67">    }</span>
+
+    /**
+     * Ugly Java way to check the argument in the constructor
+     */
+    private static Class&lt;? extends Object&gt; checkRoot(Class&lt;? extends Object&gt; theRoot) {
+<span class="pc bpc" id="L73" title="1 of 2 branches missed.">        if (theRoot == null) {</span>
+<span class="nc" id="L74">            throw new NullPointerException(&quot;Root class must be provided.&quot;);</span>
+        } else
+<span class="fc" id="L76">            return theRoot;</span>
+    }
+
+    public Constructor(TypeDescription theRoot) {
+<span class="fc" id="L80">        this(theRoot, null, new LoaderOptions());</span>
+<span class="fc" id="L81">    }</span>
+
+    public Constructor(TypeDescription theRoot, LoaderOptions loadingConfig) {
+<span class="nc" id="L84">        this(theRoot, null, loadingConfig);</span>
+<span class="nc" id="L85">    }</span>
+
+    public Constructor(TypeDescription theRoot, Collection&lt;TypeDescription&gt; moreTDs) {
+<span class="nc" id="L88">    	this(theRoot, moreTDs, new LoaderOptions());</span>
+<span class="nc" id="L89">    }</span>
+
+    public Constructor(TypeDescription theRoot, Collection&lt;TypeDescription&gt; moreTDs, LoaderOptions loadingConfig) {
+<span class="fc" id="L92">    	super(loadingConfig);</span>
+<span class="pc bpc" id="L93" title="1 of 2 branches missed.">        if (theRoot == null) {</span>
+<span class="nc" id="L94">            throw new NullPointerException(&quot;Root type must be provided.&quot;);</span>
+        }
+<span class="fc" id="L96">        this.yamlConstructors.put(null, new ConstructYamlObject());</span>
+<span class="pc bpc" id="L97" title="1 of 2 branches missed.">        if (!Object.class.equals(theRoot.getType())) {</span>
+<span class="nc" id="L98">            rootTag = new Tag(theRoot.getType());</span>
+        }
+<span class="fc" id="L100">        yamlClassConstructors.put(NodeId.scalar, new ConstructScalar());</span>
+<span class="fc" id="L101">        yamlClassConstructors.put(NodeId.mapping, new ConstructMapping());</span>
+<span class="fc" id="L102">        yamlClassConstructors.put(NodeId.sequence, new ConstructSequence());</span>
+<span class="fc" id="L103">        addTypeDescription(theRoot);</span>
+<span class="pc bpc" id="L104" title="1 of 2 branches missed.">        if (moreTDs != null) {</span>
+<span class="nc bnc" id="L105" title="All 2 branches missed.">            for (TypeDescription td : moreTDs) {</span>
+<span class="nc" id="L106">                addTypeDescription(td);</span>
+            }
+        }
+<span class="fc" id="L109">    }</span>
+
+    /**
+     * Create Constructor for a class which does not have to be in the classpath
+     * or for a definition from a Spring ApplicationContext.
+     *
+     * @param theRoot
+     *            fully qualified class name of the root class (usually
+     *            JavaBean)
+     * @throws ClassNotFoundException if cannot be loaded by the classloader
+     */
+    public Constructor(String theRoot) throws ClassNotFoundException {
+<span class="nc" id="L121">        this(Class.forName(check(theRoot)));</span>
+<span class="nc" id="L122">    }</span>
+
+    public Constructor(String theRoot, LoaderOptions loadingConfig) throws ClassNotFoundException {
+<span class="nc" id="L125">        this(Class.forName(check(theRoot)), loadingConfig);</span>
+<span class="nc" id="L126">    }</span>
+
+    private static final String check(String s) {
+<span class="nc bnc" id="L129" title="All 2 branches missed.">        if (s == null) {</span>
+<span class="nc" id="L130">            throw new NullPointerException(&quot;Root type must be provided.&quot;);</span>
+        }
+<span class="nc bnc" id="L132" title="All 2 branches missed.">        if (s.trim().length() == 0) {</span>
+<span class="nc" id="L133">            throw new YAMLException(&quot;Root type must be provided.&quot;);</span>
+        }
+<span class="nc" id="L135">        return s;</span>
+    }
+
+    /**
+     * Construct mapping instance (Map, JavaBean) when the runtime class is
+     * known.
+     */
+<span class="fc" id="L142">    protected class ConstructMapping implements Construct {</span>
+
+        /**
+         * Construct JavaBean. If type safe collections are used please look at
+         * &lt;code&gt;TypeDescription&lt;/code&gt;.
+         *
+         * @param node
+         *            node where the keys are property names (they can only be
+         *            &lt;code&gt;String&lt;/code&gt;s) and values are objects to be created
+         * @return constructed JavaBean
+         */
+        public Object construct(Node node) {
+<span class="fc" id="L154">            MappingNode mnode = (MappingNode) node;</span>
+<span class="pc bpc" id="L155" title="1 of 2 branches missed.">            if (Map.class.isAssignableFrom(node.getType())) {</span>
+<span class="nc bnc" id="L156" title="All 2 branches missed.">                if (node.isTwoStepsConstruction()) {</span>
+<span class="nc" id="L157">                    return newMap(mnode);</span>
+                } else {
+<span class="nc" id="L159">                    return constructMapping(mnode);</span>
+                }
+<span class="fc bfc" id="L161" title="All 2 branches covered.">            } else if (Collection.class.isAssignableFrom(node.getType())) {</span>
+<span class="pc bpc" id="L162" title="1 of 2 branches missed.">                if (node.isTwoStepsConstruction()) {</span>
+<span class="nc" id="L163">                    return newSet(mnode);</span>
+                } else {
+<span class="fc" id="L165">                    return constructSet(mnode);</span>
+                }
+            } else {
+<span class="fc" id="L168">                Object obj = Constructor.this.newInstance(mnode);</span>
+<span class="nc bnc" id="L169" title="All 2 branches missed.">                if (node.isTwoStepsConstruction()) {</span>
+<span class="nc" id="L170">                    return obj;</span>
+                } else {
+<span class="nc" id="L172">                    return constructJavaBean2ndStep(mnode, obj);</span>
+                }
+            }
+        }
+
+        @SuppressWarnings(&quot;unchecked&quot;)
+        public void construct2ndStep(Node node, Object object) {
+<span class="nc bnc" id="L179" title="All 2 branches missed.">            if (Map.class.isAssignableFrom(node.getType())) {</span>
+<span class="nc" id="L180">                constructMapping2ndStep((MappingNode) node, (Map&lt;Object, Object&gt;) object);</span>
+<span class="nc bnc" id="L181" title="All 2 branches missed.">            } else if (Set.class.isAssignableFrom(node.getType())) {</span>
+<span class="nc" id="L182">                constructSet2ndStep((MappingNode) node, (Set&lt;Object&gt;) object);</span>
+<span class="nc" id="L183">            } else {</span>
+<span class="nc" id="L184">                constructJavaBean2ndStep((MappingNode) node, object);</span>
+            }
+<span class="nc" id="L186">        }</span>
+
+        // protected Object createEmptyJavaBean(MappingNode node) {
+        // try {
+        // Object instance = Constructor.this.newInstance(node);
+        // if (instance != null) {
+        // return instance;
+        // }
+        //
+        // /**
+        // * Using only default constructor. Everything else will be
+        // * initialized on 2nd step. If we do here some partial
+        // * initialization, how do we then track what need to be done on
+        // * 2nd step? I think it is better to get only object here (to
+        // * have it as reference for recursion) and do all other thing on
+        // * 2nd step.
+        // */
+        // java.lang.reflect.Constructor&lt;?&gt; c =
+        // node.getType().getDeclaredConstructor();
+        // c.setAccessible(true);
+        // return c.newInstance();
+        // } catch (Exception e) {
+        // throw new YAMLException(e);
+        // }
+        // }
+
+        protected Object constructJavaBean2ndStep(MappingNode node, Object object) {
+<span class="fc" id="L213">            flattenMapping(node);</span>
+<span class="fc" id="L214">            Class&lt;? extends Object&gt; beanType = node.getType();</span>
+<span class="fc" id="L215">            List&lt;NodeTuple&gt; nodeValue = node.getValue();</span>
+<span class="pc bpc" id="L216" title="1 of 2 branches missed.">            for (NodeTuple tuple : nodeValue) {</span>
+                ScalarNode keyNode;
+<span class="pc bpc" id="L218" title="1 of 2 branches missed.">                if (tuple.getKeyNode() instanceof ScalarNode) {</span>
+                    // key must be scalar
+<span class="fc" id="L220">                    keyNode = (ScalarNode) tuple.getKeyNode();</span>
+<span class="fc" id="L221">                } else {</span>
+<span class="nc" id="L222">                    throw new YAMLException(</span>
+<span class="nc" id="L223">                            &quot;Keys must be scalars but found: &quot; + tuple.getKeyNode());</span>
+                }
+<span class="fc" id="L225">                Node valueNode = tuple.getValueNode();</span>
+                // keys can only be Strings
+<span class="fc" id="L227">                keyNode.setType(String.class);</span>
+<span class="fc" id="L228">                String key = (String) constructObject(keyNode);</span>
+                try {
+<span class="fc" id="L230">                    TypeDescription memberDescription = typeDefinitions.get(beanType);</span>
+<span class="nc bnc" id="L231" title="All 2 branches missed.">                    Property property = memberDescription == null ? getProperty(beanType, key)</span>
+<span class="nc" id="L232">                            : memberDescription.getProperty(key);</span>
+
+<span class="nc bnc" id="L234" title="All 2 branches missed.">                    if (!property.isWritable()) {</span>
+<span class="nc" id="L235">                        throw new YAMLException(&quot;No writable property '&quot; + key + &quot;' on class: &quot;</span>
+<span class="nc" id="L236">                                + beanType.getName());</span>
+                    }
+
+<span class="nc" id="L239">                    valueNode.setType(property.getType());</span>
+<span class="nc bnc" id="L240" title="All 2 branches missed.">                    final boolean typeDetected = (memberDescription != null)</span>
+<span class="nc" id="L241">                            ? memberDescription.setupPropertyType(key, valueNode)</span>
+<span class="nc" id="L242">                            : false;</span>
+<span class="nc bnc" id="L243" title="All 4 branches missed.">                    if (!typeDetected &amp;&amp; valueNode.getNodeId() != NodeId.scalar) {</span>
+                        // only if there is no explicit TypeDescription
+<span class="nc" id="L245">                        Class&lt;?&gt;[] arguments = property.getActualTypeArguments();</span>
+<span class="nc bnc" id="L246" title="All 4 branches missed.">                        if (arguments != null &amp;&amp; arguments.length &gt; 0) {</span>
+                            // type safe (generic) collection may contain the
+                            // proper class
+<span class="nc bnc" id="L249" title="All 2 branches missed.">                            if (valueNode.getNodeId() == NodeId.sequence) {</span>
+<span class="nc" id="L250">                                Class&lt;?&gt; t = arguments[0];</span>
+<span class="nc" id="L251">                                SequenceNode snode = (SequenceNode) valueNode;</span>
+<span class="nc" id="L252">                                snode.setListType(t);</span>
+<span class="nc bnc" id="L253" title="All 2 branches missed.">                            } else if (Set.class.isAssignableFrom(valueNode.getType())) {</span>
+<span class="nc" id="L254">                                Class&lt;?&gt; t = arguments[0];</span>
+<span class="nc" id="L255">                                MappingNode mnode = (MappingNode) valueNode;</span>
+<span class="nc" id="L256">                                mnode.setOnlyKeyType(t);</span>
+<span class="nc" id="L257">                                mnode.setUseClassConstructor(true);</span>
+<span class="nc bnc" id="L258" title="All 2 branches missed.">                            } else if (Map.class.isAssignableFrom(valueNode.getType())) {</span>
+<span class="nc" id="L259">                                Class&lt;?&gt; keyType = arguments[0];</span>
+<span class="nc" id="L260">                                Class&lt;?&gt; valueType = arguments[1];</span>
+<span class="nc" id="L261">                                MappingNode mnode = (MappingNode) valueNode;</span>
+<span class="nc" id="L262">                                mnode.setTypes(keyType, valueType);</span>
+<span class="nc" id="L263">                                mnode.setUseClassConstructor(true);</span>
+                            }
+                        }
+                    }
+
+<span class="nc bnc" id="L268" title="All 2 branches missed.">                    Object value = (memberDescription != null)</span>
+<span class="nc" id="L269">                            ? newInstance(memberDescription, key, valueNode)</span>
+<span class="nc" id="L270">                            : constructObject(valueNode);</span>
+                    // Correct when the property expects float but double was
+                    // constructed
+<span class="nc bnc" id="L273" title="All 4 branches missed.">                    if (property.getType() == Float.TYPE || property.getType() == Float.class) {</span>
+<span class="nc bnc" id="L274" title="All 2 branches missed.">                        if (value instanceof Double) {</span>
+<span class="nc" id="L275">                            value = ((Double) value).floatValue();</span>
+                        }
+                    }
+                    // Correct when the property a String but the value is binary
+<span class="nc bnc" id="L279" title="All 4 branches missed.">                    if (property.getType() == String.class &amp;&amp; Tag.BINARY.equals(valueNode.getTag())</span>
+<span class="nc bnc" id="L280" title="All 2 branches missed.">                            &amp;&amp; value instanceof byte[]) {</span>
+<span class="nc" id="L281">                        value = new String((byte[]) value);</span>
+                    }
+
+<span class="nc bnc" id="L284" title="All 2 branches missed.">                    if (memberDescription == null</span>
+<span class="nc bnc" id="L285" title="All 2 branches missed.">                            || !memberDescription.setProperty(object, key, value)) {</span>
+<span class="nc" id="L286">                        property.set(object, value);</span>
+                    }
+<span class="nc" id="L288">                } catch (DuplicateKeyException e) {</span>
+<span class="nc" id="L289">                    throw e;</span>
+<span class="fc" id="L290">                } catch (Exception e) {</span>
+<span class="fc" id="L291">                    throw new ConstructorException(</span>
+<span class="fc" id="L292">                            &quot;Cannot create property=&quot; + key + &quot; for JavaBean=&quot; + object,</span>
+<span class="fc" id="L293">                            node.getStartMark(), e.getMessage(), valueNode.getStartMark(), e);</span>
+                }
+            }
+<span class="nc" id="L296">            return object;</span>
+        }
+
+        private Object newInstance(TypeDescription memberDescription, String propertyName,
+                Node node) {
+<span class="nc" id="L301">            Object newInstance = memberDescription.newInstance(propertyName, node);</span>
+<span class="nc bnc" id="L302" title="All 2 branches missed.">            if (newInstance != null) {</span>
+<span class="nc" id="L303">                constructedObjects.put(node, newInstance);</span>
+<span class="nc" id="L304">                return constructObjectNoCheck(node);</span>
+            }
+<span class="nc" id="L306">            return constructObject(node);</span>
+        }
+
+        protected Property getProperty(Class&lt;? extends Object&gt; type, String name) {
+<span class="nc" id="L310">            return getPropertyUtils().getProperty(type, name);</span>
+        }
+    }
+
+    /**
+     * Construct an instance when the runtime class is not known but a global
+     * tag with a class name is defined. It delegates the construction to the
+     * appropriate constructor based on the node kind (scalar, sequence,
+     * mapping)
+     */
+<span class="fc" id="L320">    protected class ConstructYamlObject implements Construct {</span>
+
+        private Construct getConstructor(Node node) {
+<span class="fc" id="L323">            Class&lt;?&gt; cl = getClassForNode(node);</span>
+<span class="fc" id="L324">            node.setType(cl);</span>
+            // call the constructor as if the runtime class is defined
+<span class="fc" id="L326">            Construct constructor = yamlClassConstructors.get(node.getNodeId());</span>
+<span class="fc" id="L327">            return constructor;</span>
+        }
+
+        public Object construct(Node node) {
+            try {
+<span class="fc" id="L332">                return getConstructor(node).construct(node);</span>
+<span class="fc" id="L333">            } catch (ConstructorException e) {</span>
+<span class="fc" id="L334">                throw e;</span>
+<span class="fc" id="L335">            } catch (Exception e) {</span>
+<span class="fc" id="L336">                throw new ConstructorException(null, null, &quot;Can't construct a java object for &quot;</span>
+<span class="fc" id="L337">                        + node.getTag() + &quot;; exception=&quot; + e.getMessage(), node.getStartMark(), e);</span>
+            }
+        }
+
+        public void construct2ndStep(Node node, Object object) {
+            try {
+<span class="nc" id="L343">                getConstructor(node).construct2ndStep(node, object);</span>
+<span class="nc" id="L344">            } catch (Exception e) {</span>
+<span class="nc" id="L345">                throw new ConstructorException(</span>
+<span class="nc" id="L346">                        null, null, &quot;Can't construct a second step for a java object for &quot;</span>
+<span class="nc" id="L347">                                + node.getTag() + &quot;; exception=&quot; + e.getMessage(),</span>
+<span class="nc" id="L348">                        node.getStartMark(), e);</span>
+            }
+<span class="nc" id="L350">        }</span>
+    }
+
+    /**
+     * Construct scalar instance when the runtime class is known. Recursive
+     * structures are not supported.
+     */
+<span class="fc" id="L357">    protected class ConstructScalar extends AbstractConstruct {</span>
+        public Object construct(Node nnode) {
+<span class="fc" id="L359">            ScalarNode node = (ScalarNode) nnode;</span>
+<span class="fc" id="L360">            Class&lt;?&gt; type = node.getType();</span>
+
+            try {
+<span class="nc" id="L363">                return newInstance(type, node, false);</span>
+<span class="fc" id="L364">            } catch (InstantiationException e1) {</span>
+            }
+
+            Object result;
+<span class="pc bpc" id="L368" title="1 of 6 branches missed.">            if (type.isPrimitive() || type == String.class || Number.class.isAssignableFrom(type)</span>
+<span class="pc bpc" id="L369" title="2 of 4 branches missed.">                    || type == Boolean.class || Date.class.isAssignableFrom(type)</span>
+<span class="pc bpc" id="L370" title="2 of 4 branches missed.">                    || type == Character.class || type == BigInteger.class</span>
+<span class="pc bpc" id="L371" title="2 of 4 branches missed.">                    || type == BigDecimal.class || Enum.class.isAssignableFrom(type)</span>
+<span class="pc bpc" id="L372" title="2 of 4 branches missed.">                    || Tag.BINARY.equals(node.getTag()) || Calendar.class.isAssignableFrom(type)</span>
+<span class="pc bpc" id="L373" title="1 of 2 branches missed.">                    || type == UUID.class) {</span>
+                // standard classes created directly
+<span class="fc" id="L375">                result = constructStandardJavaInstance(type, node);</span>
+<span class="fc" id="L376">            } else {</span>
+                // there must be only 1 constructor with 1 argument
+<span class="fc" id="L378">                java.lang.reflect.Constructor&lt;?&gt;[] javaConstructors = type</span>
+<span class="fc" id="L379">                        .getDeclaredConstructors();</span>
+<span class="fc" id="L380">                int oneArgCount = 0;</span>
+<span class="fc" id="L381">                java.lang.reflect.Constructor&lt;?&gt; javaConstructor = null;</span>
+<span class="fc bfc" id="L382" title="All 2 branches covered.">                for (java.lang.reflect.Constructor&lt;?&gt; c : javaConstructors) {</span>
+<span class="fc bfc" id="L383" title="All 2 branches covered.">                    if (c.getParameterTypes().length == 1) {</span>
+<span class="fc" id="L384">                        oneArgCount++;</span>
+<span class="fc" id="L385">                        javaConstructor = c;</span>
+                    }
+                }
+                Object argument;
+<span class="fc bfc" id="L389" title="All 2 branches covered.">                if (javaConstructor == null) {</span>
+                    try {
+<span class="nc" id="L391">                        return newInstance(type, node, false);</span>
+<span class="fc" id="L392">                    } catch (InstantiationException ie) {</span>
+<span class="fc" id="L393">                        throw new YAMLException(&quot;No single argument constructor found for &quot; + type</span>
+<span class="fc" id="L394">                                + &quot; : &quot; + ie.getMessage());</span>
+                    }
+<span class="fc bfc" id="L396" title="All 2 branches covered.">                } else if (oneArgCount == 1) {</span>
+<span class="fc" id="L397">                    argument = constructStandardJavaInstance(javaConstructor.getParameterTypes()[0],</span>
+<span class="fc" id="L398">                            node);</span>
+<span class="fc" id="L399">                } else {</span>
+                    // TODO it should be possible to use implicit types instead
+                    // of forcing String. Resolver must be available here to
+                    // obtain the implicit tag. Then we can set the tag and call
+                    // callConstructor(node) to create the argument instance.
+                    // On the other hand it may be safer to require a custom
+                    // constructor to avoid guessing the argument class
+<span class="fc" id="L406">                    argument = constructScalar(node);</span>
+                    try {
+<span class="fc" id="L408">                        javaConstructor = type.getDeclaredConstructor(String.class);</span>
+<span class="fc" id="L409">                    } catch (Exception e) {</span>
+<span class="fc" id="L410">                        throw new YAMLException(&quot;Can't construct a java object for scalar &quot;</span>
+<span class="fc" id="L411">                                + node.getTag() + &quot;; No String constructor found. Exception=&quot;</span>
+<span class="fc" id="L412">                                + e.getMessage(), e);</span>
+                    }
+                }
+                try {
+<span class="fc" id="L416">                    javaConstructor.setAccessible(true);</span>
+<span class="nc" id="L417">                    result = javaConstructor.newInstance(argument);</span>
+<span class="pc" id="L418">                } catch (Exception e) {</span>
+<span class="fc" id="L419">                    throw new ConstructorException(null, null,</span>
+<span class="fc" id="L420">                            &quot;Can't construct a java object for scalar &quot; + node.getTag()</span>
+<span class="fc" id="L421">                                    + &quot;; exception=&quot; + e.getMessage(),</span>
+<span class="fc" id="L422">                            node.getStartMark(), e);</span>
+                }
+            }
+<span class="fc" id="L425">            return result;</span>
+        }
+
+        @SuppressWarnings(&quot;unchecked&quot;)
+        private Object constructStandardJavaInstance(@SuppressWarnings(&quot;rawtypes&quot;) Class type,
+                ScalarNode node) {
+            Object result;
+<span class="fc bfc" id="L432" title="All 2 branches covered.">            if (type == String.class) {</span>
+<span class="fc" id="L433">                Construct stringConstructor = yamlConstructors.get(Tag.STR);</span>
+<span class="fc" id="L434">                result = stringConstructor.construct(node);</span>
+<span class="pc bpc" id="L435" title="2 of 4 branches missed.">            } else if (type == Boolean.class || type == Boolean.TYPE) {</span>
+<span class="nc" id="L436">                Construct boolConstructor = yamlConstructors.get(Tag.BOOL);</span>
+<span class="nc" id="L437">                result = boolConstructor.construct(node);</span>
+<span class="pc bpc" id="L438" title="2 of 4 branches missed.">            } else if (type == Character.class || type == Character.TYPE) {</span>
+<span class="nc" id="L439">                Construct charConstructor = yamlConstructors.get(Tag.STR);</span>
+<span class="nc" id="L440">                String ch = (String) charConstructor.construct(node);</span>
+<span class="nc bnc" id="L441" title="All 2 branches missed.">                if (ch.length() == 0) {</span>
+<span class="nc" id="L442">                    result = null;</span>
+<span class="nc bnc" id="L443" title="All 2 branches missed.">                } else if (ch.length() != 1) {</span>
+<span class="nc" id="L444">                    throw new YAMLException(</span>
+<span class="nc" id="L445">                            &quot;Invalid node Character: '&quot; + ch + &quot;'; length: &quot; + ch.length());</span>
+                } else {
+<span class="nc" id="L447">                    result = Character.valueOf(ch.charAt(0));</span>
+                }
+<span class="pc bpc" id="L449" title="1 of 2 branches missed.">            } else if (Date.class.isAssignableFrom(type)) {</span>
+<span class="nc" id="L450">                Construct dateConstructor = yamlConstructors.get(Tag.TIMESTAMP);</span>
+<span class="nc" id="L451">                Date date = (Date) dateConstructor.construct(node);</span>
+<span class="nc bnc" id="L452" title="All 2 branches missed.">                if (type == Date.class) {</span>
+<span class="nc" id="L453">                    result = date;</span>
+<span class="nc" id="L454">                } else {</span>
+                    try {
+<span class="nc" id="L456">                        java.lang.reflect.Constructor&lt;?&gt; constr = type.getConstructor(long.class);</span>
+<span class="nc" id="L457">                        result = constr.newInstance(date.getTime());</span>
+<span class="nc" id="L458">                    } catch (RuntimeException e) {</span>
+<span class="nc" id="L459">                        throw e;</span>
+<span class="nc" id="L460">                    } catch (Exception e) {</span>
+<span class="nc" id="L461">                        throw new YAMLException(&quot;Cannot construct: '&quot; + type + &quot;'&quot;);</span>
+                    }
+                }
+<span class="pc bpc" id="L464" title="3 of 6 branches missed.">            } else if (type == Float.class || type == Double.class || type == Float.TYPE</span>
+<span class="pc bpc" id="L465" title="2 of 4 branches missed.">                    || type == Double.TYPE || type == BigDecimal.class) {</span>
+<span class="nc bnc" id="L466" title="All 2 branches missed.">                if (type == BigDecimal.class) {</span>
+<span class="nc" id="L467">                    result = new BigDecimal(node.getValue());</span>
+<span class="nc" id="L468">                } else {</span>
+<span class="nc" id="L469">                    Construct doubleConstructor = yamlConstructors.get(Tag.FLOAT);</span>
+<span class="nc" id="L470">                    result = doubleConstructor.construct(node);</span>
+<span class="nc bnc" id="L471" title="All 4 branches missed.">                    if (type == Float.class || type == Float.TYPE) {</span>
+<span class="nc" id="L472">                        result = Float.valueOf(((Double) result).floatValue());</span>
+                    }
+                }
+<span class="pc bpc" id="L475" title="3 of 6 branches missed.">            } else if (type == Byte.class || type == Short.class || type == Integer.class</span>
+<span class="pc bpc" id="L476" title="3 of 6 branches missed.">                    || type == Long.class || type == BigInteger.class || type == Byte.TYPE</span>
+<span class="pc bpc" id="L477" title="2 of 6 branches missed.">                    || type == Short.TYPE || type == Integer.TYPE || type == Long.TYPE) {</span>
+<span class="fc" id="L478">                Construct intConstructor = yamlConstructors.get(Tag.INT);</span>
+<span class="nc" id="L479">                result = intConstructor.construct(node);</span>
+<span class="nc bnc" id="L480" title="All 4 branches missed.">                if (type == Byte.class || type == Byte.TYPE) {</span>
+<span class="nc" id="L481">                    result = Integer.valueOf(result.toString()).byteValue();</span>
+<span class="nc bnc" id="L482" title="All 4 branches missed.">                } else if (type == Short.class || type == Short.TYPE) {</span>
+<span class="nc" id="L483">                    result = Integer.valueOf(result.toString()).shortValue();</span>
+<span class="nc bnc" id="L484" title="All 4 branches missed.">                } else if (type == Integer.class || type == Integer.TYPE) {</span>
+<span class="nc" id="L485">                    result = Integer.parseInt(result.toString());</span>
+<span class="nc bnc" id="L486" title="All 4 branches missed.">                } else if (type == Long.class || type == Long.TYPE) {</span>
+<span class="nc" id="L487">                    result = Long.valueOf(result.toString());</span>
+<span class="nc" id="L488">                } else {</span>
+                    // only BigInteger left
+<span class="nc" id="L490">                    result = new BigInteger(result.toString());</span>
+                }
+<span class="pc bpc" id="L492" title="1 of 2 branches missed.">            } else if (Enum.class.isAssignableFrom(type)) {</span>
+<span class="nc" id="L493">                String enumValueName = node.getValue();</span>
+                try {
+<span class="nc bnc" id="L495" title="All 2 branches missed.">                    if(loadingConfig.isEnumCaseSensitive()) {</span>
+<span class="nc" id="L496">                        result = Enum.valueOf(type, enumValueName);</span>
+<span class="nc" id="L497">                    } else {</span>
+<span class="nc" id="L498">                        result = EnumUtils.findEnumInsensitiveCase(type, enumValueName);</span>
+                    }
+<span class="nc" id="L500">                } catch (Exception ex) {</span>
+<span class="nc" id="L501">                    throw new YAMLException(&quot;Unable to find enum value '&quot; + enumValueName</span>
+<span class="nc" id="L502">                            + &quot;' for enum class: &quot; + type.getName());</span>
+                }
+<span class="pc bpc" id="L504" title="1 of 2 branches missed.">            } else if (Calendar.class.isAssignableFrom(type)) {</span>
+<span class="nc" id="L505">                ConstructYamlTimestamp contr = new ConstructYamlTimestamp();</span>
+<span class="nc" id="L506">                contr.construct(node);</span>
+<span class="nc" id="L507">                result = contr.getCalendar();</span>
+<span class="pc bpc" id="L508" title="1 of 2 branches missed.">            } else if (Number.class.isAssignableFrom(type)) {</span>
+                //since we do not know the exact type we create Float
+<span class="nc" id="L510">                ConstructYamlFloat contr = new ConstructYamlFloat();</span>
+<span class="nc" id="L511">                result = contr.construct(node);</span>
+<span class="pc bpc" id="L512" title="1 of 2 branches missed.">            } else if (UUID.class == type) {</span>
+<span class="nc" id="L513">                result = UUID.fromString(node.getValue());</span>
+<span class="nc" id="L514">            } else {</span>
+<span class="fc bfc" id="L515" title="All 2 branches covered.">                if (yamlConstructors.containsKey(node.getTag())) {</span>
+<span class="fc" id="L516">                    result = yamlConstructors.get(node.getTag()).construct(node);</span>
+<span class="fc" id="L517">                } else {</span>
+<span class="fc" id="L518">                    throw new YAMLException(&quot;Unsupported class: &quot; + type);</span>
+                }
+            }
+<span class="fc" id="L521">            return result;</span>
+        }
+    }
+
+    /**
+     * Construct sequence (List, Array, or immutable object) when the runtime
+     * class is known.
+     */
+<span class="fc" id="L529">    protected class ConstructSequence implements Construct {</span>
+        @SuppressWarnings(&quot;unchecked&quot;)
+        public Object construct(Node node) {
+<span class="fc" id="L532">            SequenceNode snode = (SequenceNode) node;</span>
+<span class="pc bpc" id="L533" title="1 of 2 branches missed.">            if (Set.class.isAssignableFrom(node.getType())) {</span>
+<span class="nc bnc" id="L534" title="All 2 branches missed.">                if (node.isTwoStepsConstruction()) {</span>
+<span class="nc" id="L535">                    throw new YAMLException(&quot;Set cannot be recursive.&quot;);</span>
+                } else {
+<span class="nc" id="L537">                    return constructSet(snode);</span>
+                }
+<span class="pc bpc" id="L539" title="1 of 2 branches missed.">            } else if (Collection.class.isAssignableFrom(node.getType())) {</span>
+<span class="nc bnc" id="L540" title="All 2 branches missed.">                if (node.isTwoStepsConstruction()) {</span>
+<span class="nc" id="L541">                    return newList(snode);</span>
+                } else {
+<span class="nc" id="L543">                    return constructSequence(snode);</span>
+                }
+<span class="fc bfc" id="L545" title="All 2 branches covered.">            } else if (node.getType().isArray()) {</span>
+<span class="pc bpc" id="L546" title="1 of 2 branches missed.">                if (node.isTwoStepsConstruction()) {</span>
+<span class="nc" id="L547">                    return createArray(node.getType(), snode.getValue().size());</span>
+                } else {
+<span class="fc" id="L549">                    return constructArray(snode);</span>
+                }
+            } else {
+                // create immutable object
+<span class="fc" id="L553">                List&lt;java.lang.reflect.Constructor&lt;?&gt;&gt; possibleConstructors = new ArrayList&lt;java.lang.reflect.Constructor&lt;?&gt;&gt;(</span>
+<span class="fc" id="L554">                        snode.getValue().size());</span>
+<span class="fc bfc" id="L555" title="All 2 branches covered.">                for (java.lang.reflect.Constructor&lt;?&gt; constructor : node.getType()</span>
+<span class="fc" id="L556">                        .getDeclaredConstructors()) {</span>
+<span class="fc bfc" id="L557" title="All 2 branches covered.">                    if (snode.getValue().size() == constructor.getParameterTypes().length) {</span>
+<span class="fc" id="L558">                        possibleConstructors.add(constructor);</span>
+                    }
+                }
+<span class="fc bfc" id="L561" title="All 2 branches covered.">                if (!possibleConstructors.isEmpty()) {</span>
+<span class="fc bfc" id="L562" title="All 2 branches covered.">                    if (possibleConstructors.size() == 1) {</span>
+<span class="fc" id="L563">                        Object[] argumentList = new Object[snode.getValue().size()];</span>
+<span class="fc" id="L564">                        java.lang.reflect.Constructor&lt;?&gt; c = possibleConstructors.get(0);</span>
+<span class="fc" id="L565">                        int index = 0;</span>
+<span class="fc bfc" id="L566" title="All 2 branches covered.">                        for (Node argumentNode : snode.getValue()) {</span>
+<span class="fc" id="L567">                            Class&lt;?&gt; type = c.getParameterTypes()[index];</span>
+                            // set runtime classes for arguments
+<span class="fc" id="L569">                            argumentNode.setType(type);</span>
+<span class="fc" id="L570">                            argumentList[index++] = constructObject(argumentNode);</span>
+                        }
+
+                        try {
+<span class="fc" id="L574">                            c.setAccessible(true);</span>
+<span class="fc" id="L575">                            return c.newInstance(argumentList);</span>
+<span class="fc" id="L576">                        } catch (Exception e) {</span>
+<span class="fc" id="L577">                            throw new YAMLException(e);</span>
+                        }
+                    }
+
+                    // use BaseConstructor
+<span class="fc" id="L582">                    List&lt;Object&gt; argumentList = (List&lt;Object&gt;) constructSequence(snode);</span>
+<span class="fc" id="L583">                    Class&lt;?&gt;[] parameterTypes = new Class[argumentList.size()];</span>
+<span class="fc" id="L584">                    int index = 0;</span>
+<span class="fc bfc" id="L585" title="All 2 branches covered.">                    for (Object parameter : argumentList) {</span>
+<span class="fc" id="L586">                        parameterTypes[index] = parameter.getClass();</span>
+<span class="fc" id="L587">                        index++;</span>
+                    }
+
+<span class="fc bfc" id="L590" title="All 2 branches covered.">                    for (java.lang.reflect.Constructor&lt;?&gt; c : possibleConstructors) {</span>
+<span class="fc" id="L591">                        Class&lt;?&gt;[] argTypes = c.getParameterTypes();</span>
+<span class="fc" id="L592">                        boolean foundConstructor = true;</span>
+<span class="fc bfc" id="L593" title="All 2 branches covered.">                        for (int i = 0; i &lt; argTypes.length; i++) {</span>
+<span class="fc bfc" id="L594" title="All 2 branches covered.">                            if (!wrapIfPrimitive(argTypes[i]).isAssignableFrom(parameterTypes[i])) {</span>
+<span class="fc" id="L595">                                foundConstructor = false;</span>
+<span class="fc" id="L596">                                break;</span>
+                            }
+                        }
+<span class="fc bfc" id="L599" title="All 2 branches covered.">                        if (foundConstructor) {</span>
+                            try {
+<span class="fc" id="L601">                                c.setAccessible(true);</span>
+<span class="nc" id="L602">                                return c.newInstance(argumentList.toArray());</span>
+<span class="fc" id="L603">                            } catch (Exception e) {</span>
+<span class="fc" id="L604">                                throw new YAMLException(e);</span>
+                            }
+                        }
+                    }
+                }
+<span class="fc" id="L609">                throw new YAMLException(</span>
+<span class="fc" id="L610">                        &quot;No suitable constructor with &quot; + String.valueOf(snode.getValue().size())</span>
+<span class="fc" id="L611">                                + &quot; arguments found for &quot; + node.getType());</span>
+
+            }
+        }
+
+        private final Class&lt;? extends Object&gt; wrapIfPrimitive(Class&lt;?&gt; clazz) {
+<span class="pc bpc" id="L617" title="1 of 2 branches missed.">            if (!clazz.isPrimitive()) {</span>
+<span class="fc" id="L618">                return clazz;</span>
+            }
+<span class="nc bnc" id="L620" title="All 2 branches missed.">            if (clazz == Integer.TYPE) {</span>
+<span class="nc" id="L621">                return Integer.class;</span>
+            }
+<span class="nc bnc" id="L623" title="All 2 branches missed.">            if (clazz == Float.TYPE) {</span>
+<span class="nc" id="L624">                return Float.class;</span>
+            }
+<span class="nc bnc" id="L626" title="All 2 branches missed.">            if (clazz == Double.TYPE) {</span>
+<span class="nc" id="L627">                return Double.class;</span>
+            }
+<span class="nc bnc" id="L629" title="All 2 branches missed.">            if (clazz == Boolean.TYPE) {</span>
+<span class="nc" id="L630">                return Boolean.class;</span>
+            }
+<span class="nc bnc" id="L632" title="All 2 branches missed.">            if (clazz == Long.TYPE) {</span>
+<span class="nc" id="L633">                return Long.class;</span>
+            }
+<span class="nc bnc" id="L635" title="All 2 branches missed.">            if (clazz == Character.TYPE) {</span>
+<span class="nc" id="L636">                return Character.class;</span>
+            }
+<span class="nc bnc" id="L638" title="All 2 branches missed.">            if (clazz == Short.TYPE) {</span>
+<span class="nc" id="L639">                return Short.class;</span>
+            }
+<span class="nc bnc" id="L641" title="All 2 branches missed.">            if (clazz == Byte.TYPE) {</span>
+<span class="nc" id="L642">                return Byte.class;</span>
+            }
+<span class="nc" id="L644">            throw new YAMLException(&quot;Unexpected primitive &quot; + clazz);</span>
+        }
+
+        @SuppressWarnings(&quot;unchecked&quot;)
+        public void construct2ndStep(Node node, Object object) {
+<span class="nc" id="L649">            SequenceNode snode = (SequenceNode) node;</span>
+<span class="nc bnc" id="L650" title="All 2 branches missed.">            if (List.class.isAssignableFrom(node.getType())) {</span>
+<span class="nc" id="L651">                List&lt;Object&gt; list = (List&lt;Object&gt;) object;</span>
+<span class="nc" id="L652">                constructSequenceStep2(snode, list);</span>
+<span class="nc bnc" id="L653" title="All 2 branches missed.">            } else if (node.getType().isArray()) {</span>
+<span class="nc" id="L654">                constructArrayStep2(snode, object);</span>
+<span class="nc" id="L655">            } else {</span>
+<span class="nc" id="L656">                throw new YAMLException(&quot;Immutable objects cannot be recursive.&quot;);</span>
+            }
+<span class="nc" id="L658">        }</span>
+    }
+
+    protected Class&lt;?&gt; getClassForNode(Node node) {
+<span class="fc" id="L662">        Class&lt;? extends Object&gt; classForTag = typeTags.get(node.getTag());</span>
+<span class="fc bfc" id="L663" title="All 2 branches covered.">        if (classForTag == null) {</span>
+<span class="fc" id="L664">            String name = node.getTag().getClassName();</span>
+            Class&lt;?&gt; cl;
+            try {
+<span class="fc" id="L667">                cl = getClassForName(name);</span>
+<span class="fc" id="L668">            } catch (ClassNotFoundException e) {</span>
+<span class="fc" id="L669">                throw new YAMLException(&quot;Class not found: &quot; + name);</span>
+            }
+<span class="fc" id="L671">            typeTags.put(node.getTag(), cl);</span>
+<span class="fc" id="L672">            return cl;</span>
+        } else {
+<span class="fc" id="L674">            return classForTag;</span>
+        }
+    }
+
+    protected Class&lt;?&gt; getClassForName(String name) throws ClassNotFoundException {
+        try {
+<span class="fc" id="L680">            return Class.forName(name, true, Thread.currentThread().getContextClassLoader());</span>
+<span class="fc" id="L681">        } catch (ClassNotFoundException e) {</span>
+<span class="nc" id="L682">            return Class.forName(name);</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

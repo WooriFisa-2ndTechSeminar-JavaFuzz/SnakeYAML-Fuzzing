@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>BaseRepresenter.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.representer</a> &gt; <span class="el_source">BaseRepresenter.java</span></div><h1>BaseRepresenter.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.representer;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.DumperOptions.FlowStyle;
+import org.yaml.snakeyaml.DumperOptions.ScalarStyle;
+import org.yaml.snakeyaml.introspector.PropertyUtils;
+import org.yaml.snakeyaml.nodes.AnchorNode;
+import org.yaml.snakeyaml.nodes.MappingNode;
+import org.yaml.snakeyaml.nodes.Node;
+import org.yaml.snakeyaml.nodes.NodeTuple;
+import org.yaml.snakeyaml.nodes.ScalarNode;
+import org.yaml.snakeyaml.nodes.SequenceNode;
+import org.yaml.snakeyaml.nodes.Tag;
+
+/**
+ * Represent basic YAML structures: scalar, sequence, mapping
+ */
+<span class="fc" id="L40">public abstract class BaseRepresenter {</span>
+<span class="fc" id="L41">    protected final Map&lt;Class&lt;?&gt;, Represent&gt; representers = new HashMap&lt;Class&lt;?&gt;, Represent&gt;();</span>
+    /**
+     * in Java 'null' is not a type. So we have to keep the null representer
+     * separately otherwise it will coincide with the default representer which
+     * is stored with the key null.
+     */
+    protected Represent nullRepresenter;
+    // the order is important (map can be also a sequence of key-values)
+<span class="fc" id="L49">    protected final Map&lt;Class&lt;?&gt;, Represent&gt; multiRepresenters = new LinkedHashMap&lt;Class&lt;?&gt;, Represent&gt;();</span>
+<span class="fc" id="L50">    protected DumperOptions.ScalarStyle defaultScalarStyle = null; //not explicitly defined</span>
+<span class="fc" id="L51">    protected FlowStyle defaultFlowStyle = FlowStyle.AUTO;</span>
+<span class="fc" id="L52">    protected final Map&lt;Object, Node&gt; representedObjects = new IdentityHashMap&lt;Object, Node&gt;() {</span>
+        private static final long serialVersionUID = -5576159264232131854L;
+
+        public Node put(Object key, Node value) {
+<span class="nc" id="L56">            return super.put(key, new AnchorNode(value));</span>
+        }
+    };
+
+    protected Object objectToRepresent;
+    private PropertyUtils propertyUtils;
+<span class="fc" id="L62">    private boolean explicitPropertyUtils = false;</span>
+
+    public Node represent(Object data) {
+<span class="nc" id="L65">        Node node = representData(data);</span>
+<span class="nc" id="L66">        representedObjects.clear();</span>
+<span class="nc" id="L67">        objectToRepresent = null;</span>
+<span class="nc" id="L68">        return node;</span>
+    }
+
+    protected final Node representData(Object data) {
+<span class="nc" id="L72">        objectToRepresent = data;</span>
+        // check for identity
+<span class="nc bnc" id="L74" title="All 2 branches missed.">        if (representedObjects.containsKey(objectToRepresent)) {</span>
+<span class="nc" id="L75">            Node node = representedObjects.get(objectToRepresent);</span>
+<span class="nc" id="L76">            return node;</span>
+        }
+        // }
+        // check for null first
+<span class="nc bnc" id="L80" title="All 2 branches missed.">        if (data == null) {</span>
+<span class="nc" id="L81">            Node node = nullRepresenter.representData(null);</span>
+<span class="nc" id="L82">            return node;</span>
+        }
+        // check the same class
+        Node node;
+<span class="nc" id="L86">        Class&lt;?&gt; clazz = data.getClass();</span>
+<span class="nc bnc" id="L87" title="All 2 branches missed.">        if (representers.containsKey(clazz)) {</span>
+<span class="nc" id="L88">            Represent representer = representers.get(clazz);</span>
+<span class="nc" id="L89">            node = representer.representData(data);</span>
+<span class="nc" id="L90">        } else {</span>
+            // check the parents
+<span class="nc bnc" id="L92" title="All 2 branches missed.">            for (Class&lt;?&gt; repr : multiRepresenters.keySet()) {</span>
+<span class="nc bnc" id="L93" title="All 4 branches missed.">                if (repr != null &amp;&amp; repr.isInstance(data)) {</span>
+<span class="nc" id="L94">                    Represent representer = multiRepresenters.get(repr);</span>
+<span class="nc" id="L95">                    node = representer.representData(data);</span>
+<span class="nc" id="L96">                    return node;</span>
+                }
+            }
+
+            // check defaults
+<span class="nc bnc" id="L101" title="All 2 branches missed.">            if (multiRepresenters.containsKey(null)) {</span>
+<span class="nc" id="L102">                Represent representer = multiRepresenters.get(null);</span>
+<span class="nc" id="L103">                node = representer.representData(data);</span>
+<span class="nc" id="L104">            } else {</span>
+<span class="nc" id="L105">                Represent representer = representers.get(null);</span>
+<span class="nc" id="L106">                node = representer.representData(data);</span>
+            }
+        }
+<span class="nc" id="L109">        return node;</span>
+    }
+
+    protected Node representScalar(Tag tag, String value, DumperOptions.ScalarStyle style) {
+<span class="nc bnc" id="L113" title="All 2 branches missed.">        if (style == null) {</span>
+<span class="nc" id="L114">            style = this.defaultScalarStyle;</span>
+        }
+<span class="nc" id="L116">        Node node = new ScalarNode(tag, value, null, null, style);</span>
+<span class="nc" id="L117">        return node;</span>
+    }
+
+    protected Node representScalar(Tag tag, String value) {
+<span class="nc" id="L121">        return representScalar(tag, value, null);</span>
+    }
+
+    protected Node representSequence(Tag tag, Iterable&lt;?&gt; sequence, DumperOptions.FlowStyle flowStyle) {
+<span class="nc" id="L125">        int size = 10;// default for ArrayList</span>
+<span class="nc bnc" id="L126" title="All 2 branches missed.">        if (sequence instanceof List&lt;?&gt;) {</span>
+<span class="nc" id="L127">            size = ((List&lt;?&gt;) sequence).size();</span>
+        }
+<span class="nc" id="L129">        List&lt;Node&gt; value = new ArrayList&lt;Node&gt;(size);</span>
+<span class="nc" id="L130">        SequenceNode node = new SequenceNode(tag, value, flowStyle);</span>
+<span class="nc" id="L131">        representedObjects.put(objectToRepresent, node);</span>
+<span class="nc" id="L132">        DumperOptions.FlowStyle bestStyle = FlowStyle.FLOW;</span>
+<span class="nc bnc" id="L133" title="All 2 branches missed.">        for (Object item : sequence) {</span>
+<span class="nc" id="L134">            Node nodeItem = representData(item);</span>
+<span class="nc bnc" id="L135" title="All 4 branches missed.">            if (!(nodeItem instanceof ScalarNode &amp;&amp; ((ScalarNode) nodeItem).isPlain())) {</span>
+<span class="nc" id="L136">                bestStyle = FlowStyle.BLOCK;</span>
+            }
+<span class="nc" id="L138">            value.add(nodeItem);</span>
+        }
+<span class="nc bnc" id="L140" title="All 2 branches missed.">        if (flowStyle == FlowStyle.AUTO) {</span>
+<span class="nc bnc" id="L141" title="All 2 branches missed.">            if (defaultFlowStyle != FlowStyle.AUTO) {</span>
+<span class="nc" id="L142">                node.setFlowStyle(defaultFlowStyle);</span>
+<span class="nc" id="L143">            } else {</span>
+<span class="nc" id="L144">                node.setFlowStyle(bestStyle);</span>
+            }
+        }
+<span class="nc" id="L147">        return node;</span>
+    }
+
+    protected Node representMapping(Tag tag, Map&lt;?, ?&gt; mapping, DumperOptions.FlowStyle flowStyle) {
+<span class="nc" id="L151">        List&lt;NodeTuple&gt; value = new ArrayList&lt;NodeTuple&gt;(mapping.size());</span>
+<span class="nc" id="L152">        MappingNode node = new MappingNode(tag, value, flowStyle);</span>
+<span class="nc" id="L153">        representedObjects.put(objectToRepresent, node);</span>
+<span class="nc" id="L154">        DumperOptions.FlowStyle bestStyle = FlowStyle.FLOW;</span>
+<span class="nc bnc" id="L155" title="All 2 branches missed.">        for (Map.Entry&lt;?, ?&gt; entry : mapping.entrySet()) {</span>
+<span class="nc" id="L156">            Node nodeKey = representData(entry.getKey());</span>
+<span class="nc" id="L157">            Node nodeValue = representData(entry.getValue());</span>
+<span class="nc bnc" id="L158" title="All 4 branches missed.">            if (!(nodeKey instanceof ScalarNode &amp;&amp; ((ScalarNode) nodeKey).isPlain())) {</span>
+<span class="nc" id="L159">                bestStyle = FlowStyle.BLOCK;</span>
+            }
+<span class="nc bnc" id="L161" title="All 4 branches missed.">            if (!(nodeValue instanceof ScalarNode &amp;&amp; ((ScalarNode) nodeValue).isPlain())) {</span>
+<span class="nc" id="L162">                bestStyle = FlowStyle.BLOCK;</span>
+            }
+<span class="nc" id="L164">            value.add(new NodeTuple(nodeKey, nodeValue));</span>
+        }
+<span class="nc bnc" id="L166" title="All 2 branches missed.">        if (flowStyle == FlowStyle.AUTO) {</span>
+<span class="nc bnc" id="L167" title="All 2 branches missed.">            if (defaultFlowStyle != FlowStyle.AUTO) {</span>
+<span class="nc" id="L168">                node.setFlowStyle(defaultFlowStyle);</span>
+<span class="nc" id="L169">            } else {</span>
+<span class="nc" id="L170">                node.setFlowStyle(bestStyle);</span>
+            }
+        }
+<span class="nc" id="L173">        return node;</span>
+    }
+
+    public void setDefaultScalarStyle(ScalarStyle defaultStyle) {
+<span class="fc" id="L177">        this.defaultScalarStyle = defaultStyle;</span>
+<span class="fc" id="L178">    }</span>
+
+    public ScalarStyle getDefaultScalarStyle() {
+<span class="nc bnc" id="L181" title="All 2 branches missed.">        if (defaultScalarStyle == null) {</span>
+<span class="nc" id="L182">            return ScalarStyle.PLAIN;</span>
+        }
+<span class="nc" id="L184">        return defaultScalarStyle;</span>
+    }
+
+    public void setDefaultFlowStyle(FlowStyle defaultFlowStyle) {
+<span class="fc" id="L188">        this.defaultFlowStyle = defaultFlowStyle;</span>
+<span class="fc" id="L189">    }</span>
+
+    public FlowStyle getDefaultFlowStyle() {
+<span class="nc" id="L192">        return this.defaultFlowStyle;</span>
+    }
+
+    public void setPropertyUtils(PropertyUtils propertyUtils) {
+<span class="nc" id="L196">        this.propertyUtils = propertyUtils;</span>
+<span class="nc" id="L197">        this.explicitPropertyUtils = true;</span>
+<span class="nc" id="L198">    }</span>
+
+    public final PropertyUtils getPropertyUtils() {
+<span class="fc bfc" id="L201" title="All 2 branches covered.">        if (propertyUtils == null) {</span>
+<span class="fc" id="L202">            propertyUtils = new PropertyUtils();</span>
+        }
+<span class="fc" id="L204">        return propertyUtils;</span>
+    }
+
+    public final boolean isExplicitPropertyUtils() {
+<span class="nc" id="L208">        return explicitPropertyUtils;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

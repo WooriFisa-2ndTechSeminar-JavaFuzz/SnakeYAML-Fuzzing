@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Resolver.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.resolver</a> &gt; <span class="el_source">Resolver.java</span></div><h1>Resolver.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.resolver;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.regex.Pattern;
+
+import org.yaml.snakeyaml.nodes.NodeId;
+import org.yaml.snakeyaml.nodes.Tag;
+
+/**
+ * Resolver tries to detect a type by content (when the tag is implicit)
+ */
+public class Resolver {
+<span class="fc" id="L31">    public static final Pattern BOOL = Pattern</span>
+<span class="fc" id="L32">            .compile(&quot;^(?:yes|Yes|YES|no|No|NO|true|True|TRUE|false|False|FALSE|on|On|ON|off|Off|OFF)$&quot;);</span>
+
+    /**
+     * The regular expression is taken from the 1.2 specification but '_'s are
+     * added to keep backwards compatibility
+     */
+<span class="fc" id="L38">    public static final Pattern FLOAT = Pattern</span>
+<span class="fc" id="L39">            .compile(&quot;^(&quot; +</span>
+                    &quot;[-+]?(?:[0-9][0-9_]*)\\.[0-9_]*(?:[eE][-+]?[0-9]+)?&quot; + // (base 10)
+                    &quot;|[-+]?(?:[0-9][0-9_]*)(?:[eE][-+]?[0-9]+)&quot; + // (base 10, scientific notation without .)
+                    &quot;|[-+]?\\.[0-9_]+(?:[eE][-+]?[0-9]+)?&quot; + // (base 10, starting with .)
+                    &quot;|[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+\\.[0-9_]*&quot; + // (base 60)
+                    &quot;|[-+]?\\.(?:inf|Inf|INF)&quot; +
+                    &quot;|\\.(?:nan|NaN|NAN)&quot; +
+                    &quot;)$&quot;);
+<span class="fc" id="L47">    public static final Pattern INT = Pattern</span>
+<span class="fc" id="L48">            .compile(&quot;^(?:&quot; +</span>
+                    &quot;[-+]?0b_*[0-1]+[0-1_]*&quot; + // (base 2)
+                    &quot;|[-+]?0_*[0-7]+[0-7_]*&quot; + // (base 8)
+                    &quot;|[-+]?(?:0|[1-9][0-9_]*)&quot; + // (base 10)
+                    &quot;|[-+]?0x_*[0-9a-fA-F]+[0-9a-fA-F_]*&quot; + // (base 16)
+                    &quot;|[-+]?[1-9][0-9_]*(?::[0-5]?[0-9])+&quot; + // (base 60)
+                    &quot;)$&quot;);
+<span class="fc" id="L55">    public static final Pattern MERGE = Pattern.compile(&quot;^(?:&lt;&lt;)$&quot;);</span>
+<span class="fc" id="L56">    public static final Pattern NULL = Pattern.compile(&quot;^(?:~|null|Null|NULL| )$&quot;);</span>
+<span class="fc" id="L57">    public static final Pattern EMPTY = Pattern.compile(&quot;^$&quot;);</span>
+<span class="fc" id="L58">    public static final Pattern TIMESTAMP = Pattern</span>
+<span class="fc" id="L59">            .compile(&quot;^(?:[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]|[0-9][0-9][0-9][0-9]-[0-9][0-9]?-[0-9][0-9]?(?:[Tt]|[ \t]+)[0-9][0-9]?:[0-9][0-9]:[0-9][0-9](?:\\.[0-9]*)?(?:[ \t]*(?:Z|[-+][0-9][0-9]?(?::[0-9][0-9])?))?)$&quot;);</span>
+<span class="fc" id="L60">    public static final Pattern VALUE = Pattern.compile(&quot;^(?:=)$&quot;);</span>
+<span class="fc" id="L61">    public static final Pattern YAML = Pattern.compile(&quot;^(?:!|&amp;|\\*)$&quot;);</span>
+
+<span class="fc" id="L63">    protected Map&lt;Character, List&lt;ResolverTuple&gt;&gt; yamlImplicitResolvers = new HashMap&lt;Character, List&lt;ResolverTuple&gt;&gt;();</span>
+
+    protected void addImplicitResolvers() {
+<span class="fc" id="L66">        addImplicitResolver(Tag.BOOL, BOOL, &quot;yYnNtTfFoO&quot;);</span>
+        /*
+         * INT must be before FLOAT because the regular expression for FLOAT
+         * matches INT (see issue 130)
+         * http://code.google.com/p/snakeyaml/issues/detail?id=130
+         */
+<span class="fc" id="L72">        addImplicitResolver(Tag.INT, INT, &quot;-+0123456789&quot;);</span>
+<span class="fc" id="L73">        addImplicitResolver(Tag.FLOAT, FLOAT, &quot;-+0123456789.&quot;);</span>
+<span class="fc" id="L74">        addImplicitResolver(Tag.MERGE, MERGE, &quot;&lt;&quot;);</span>
+<span class="fc" id="L75">        addImplicitResolver(Tag.NULL, NULL, &quot;~nN\0&quot;);</span>
+<span class="fc" id="L76">        addImplicitResolver(Tag.NULL, EMPTY, null);</span>
+<span class="fc" id="L77">        addImplicitResolver(Tag.TIMESTAMP, TIMESTAMP, &quot;0123456789&quot;);</span>
+        // The following implicit resolver is only for documentation
+        // purposes.
+        // It cannot work
+        // because plain scalars cannot start with '!', '&amp;', or '*'.
+<span class="fc" id="L82">        addImplicitResolver(Tag.YAML, YAML, &quot;!&amp;*&quot;);</span>
+<span class="fc" id="L83">    }</span>
+
+<span class="fc" id="L85">    public Resolver() {</span>
+<span class="fc" id="L86">        addImplicitResolvers();</span>
+<span class="fc" id="L87">    }</span>
+
+    public void addImplicitResolver(Tag tag, Pattern regexp, String first) {
+<span class="fc bfc" id="L90" title="All 2 branches covered.">        if (first == null) {</span>
+<span class="fc" id="L91">            List&lt;ResolverTuple&gt; curr = yamlImplicitResolvers.get(null);</span>
+<span class="pc bpc" id="L92" title="1 of 2 branches missed.">            if (curr == null) {</span>
+<span class="nc" id="L93">                curr = new ArrayList&lt;ResolverTuple&gt;();</span>
+<span class="nc" id="L94">                yamlImplicitResolvers.put(null, curr);</span>
+            }
+<span class="fc" id="L96">            curr.add(new ResolverTuple(tag, regexp));</span>
+<span class="fc" id="L97">        } else {</span>
+<span class="fc" id="L98">            char[] chrs = first.toCharArray();</span>
+<span class="fc bfc" id="L99" title="All 2 branches covered.">            for (int i = 0, j = chrs.length; i &lt; j; i++) {</span>
+<span class="fc" id="L100">                Character theC = Character.valueOf(chrs[i]);</span>
+<span class="fc bfc" id="L101" title="All 2 branches covered.">                if (theC == 0) {</span>
+                    // special case: for null
+<span class="fc" id="L103">                    theC = null;</span>
+                }
+<span class="fc" id="L105">                List&lt;ResolverTuple&gt; curr = yamlImplicitResolvers.get(theC);</span>
+<span class="fc bfc" id="L106" title="All 2 branches covered.">                if (curr == null) {</span>
+<span class="fc" id="L107">                    curr = new ArrayList&lt;ResolverTuple&gt;();</span>
+<span class="fc" id="L108">                    yamlImplicitResolvers.put(theC, curr);</span>
+                }
+<span class="fc" id="L110">                curr.add(new ResolverTuple(tag, regexp));</span>
+            }
+        }
+<span class="fc" id="L113">    }</span>
+
+    public Tag resolve(NodeId kind, String value, boolean implicit) {
+<span class="fc bfc" id="L116" title="All 4 branches covered.">        if (kind == NodeId.scalar &amp;&amp; implicit) {</span>
+            final List&lt;ResolverTuple&gt; resolvers;
+<span class="fc bfc" id="L118" title="All 2 branches covered.">            if (value.length() == 0) {</span>
+<span class="fc" id="L119">                resolvers = yamlImplicitResolvers.get('\0');</span>
+<span class="fc" id="L120">            } else {</span>
+<span class="fc" id="L121">                resolvers = yamlImplicitResolvers.get(value.charAt(0));</span>
+            }
+<span class="fc bfc" id="L123" title="All 2 branches covered.">            if (resolvers != null) {</span>
+<span class="fc bfc" id="L124" title="All 2 branches covered.">                for (ResolverTuple v : resolvers) {</span>
+<span class="fc" id="L125">                    Tag tag = v.getTag();</span>
+<span class="fc" id="L126">                    Pattern regexp = v.getRegexp();</span>
+<span class="fc bfc" id="L127" title="All 2 branches covered.">                    if (regexp.matcher(value).matches()) {</span>
+<span class="fc" id="L128">                        return tag;</span>
+                    }
+                }
+            }
+<span class="pc bpc" id="L132" title="1 of 2 branches missed.">            if (yamlImplicitResolvers.containsKey(null)) {</span>
+<span class="fc bfc" id="L133" title="All 2 branches covered.">                for (ResolverTuple v : yamlImplicitResolvers.get(null)) {</span>
+<span class="fc" id="L134">                    Tag tag = v.getTag();</span>
+<span class="fc" id="L135">                    Pattern regexp = v.getRegexp();</span>
+<span class="fc bfc" id="L136" title="All 2 branches covered.">                    if (regexp.matcher(value).matches()) {</span>
+<span class="fc" id="L137">                        return tag;</span>
+                    }
+                }
+            }
+        }
+<span class="fc bfc" id="L142" title="All 3 branches covered.">        switch (kind) {</span>
+        case scalar:
+<span class="fc" id="L144">            return Tag.STR;</span>
+        case sequence:
+<span class="fc" id="L146">            return Tag.SEQ;</span>
+        default:
+<span class="fc" id="L148">            return Tag.MAP;</span>
+        }
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

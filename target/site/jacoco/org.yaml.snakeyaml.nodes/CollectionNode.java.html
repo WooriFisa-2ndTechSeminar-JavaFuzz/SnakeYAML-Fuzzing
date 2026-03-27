@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CollectionNode.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.nodes</a> &gt; <span class="el_source">CollectionNode.java</span></div><h1>CollectionNode.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.nodes;
+
+import java.util.List;
+
+import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.error.Mark;
+
+/**
+ * Base class for the two collection types {@link MappingNode mapping} and
+ * {@link SequenceNode collection}.
+ */
+public abstract class CollectionNode&lt;T&gt; extends Node {
+    private DumperOptions.FlowStyle flowStyle;
+
+    public CollectionNode(Tag tag, Mark startMark, Mark endMark, DumperOptions.FlowStyle flowStyle) {
+<span class="fc" id="L31">        super(tag, startMark, endMark);</span>
+<span class="fc" id="L32">        setFlowStyle(flowStyle);</span>
+<span class="fc" id="L33">    }</span>
+
+    /*
+     * Existed in older versions but replaced with {@link DumperOptions.FlowStyle}-based constructor.
+     * Restored in v1.22 for backwards compatibility.
+     * @deprecated Since restored in v1.22.  Use {@link CollectionNode#CollectionNode(Tag, Mark, Mark, org.yaml.snakeyaml.DumperOptions.FlowStyle) }.
+     */
+    @Deprecated
+    public CollectionNode(Tag tag, Mark startMark, Mark endMark, Boolean flowStyle) {
+<span class="nc" id="L42">        this(tag, startMark, endMark, DumperOptions.FlowStyle.fromBoolean(flowStyle));</span>
+<span class="nc" id="L43">    }</span>
+
+    /**
+     * Returns the elements in this sequence.
+     *
+     * @return Nodes in the specified order.
+     */
+    abstract public List&lt;T&gt; getValue();
+
+    /**
+     * Serialization style of this collection.
+     *
+     * @return &lt;code&gt;true&lt;/code&gt; for flow style, &lt;code&gt;false&lt;/code&gt; for block
+     *         style.
+     */
+    public DumperOptions.FlowStyle getFlowStyle() {
+<span class="nc" id="L59">        return flowStyle;</span>
+    }
+
+    public void setFlowStyle(DumperOptions.FlowStyle flowStyle) {
+<span class="pc bpc" id="L63" title="1 of 2 branches missed.">        if (flowStyle == null) throw new NullPointerException(&quot;Flow style must be provided.&quot;);</span>
+<span class="fc" id="L64">        this.flowStyle = flowStyle;</span>
+<span class="fc" id="L65">    }</span>
+
+    /*
+     * Existed in older versions but replaced with {@link DumperOptions.FlowStyle}-based method.
+     * Restored in v1.26 for backwards compatibility.
+     * @deprecated Since restored in v1.26.  Use {@link CollectionNode#setFlowStyle(org.yaml.snakeyaml.DumperOptions.FlowStyle) }.
+     */
+    @Deprecated
+    public void setFlowStyle(Boolean flowStyle) {     
+<span class="nc" id="L74">        setFlowStyle(DumperOptions.FlowStyle.fromBoolean(flowStyle)); </span>
+<span class="nc" id="L75">    }</span>
+
+    public void setEndMark(Mark endMark) {
+<span class="fc" id="L78">        this.endMark = endMark;</span>
+<span class="fc" id="L79">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

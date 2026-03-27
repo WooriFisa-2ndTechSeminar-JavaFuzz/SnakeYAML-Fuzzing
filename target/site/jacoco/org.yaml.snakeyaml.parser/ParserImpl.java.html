@@ -1,0 +1,937 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ParserImpl.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.parser</a> &gt; <span class="el_source">ParserImpl.java</span></div><h1>ParserImpl.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.parser;
+
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+
+import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.DumperOptions.Version;
+import org.yaml.snakeyaml.comments.CommentType;
+import org.yaml.snakeyaml.error.Mark;
+import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.events.AliasEvent;
+import org.yaml.snakeyaml.events.CommentEvent;
+import org.yaml.snakeyaml.events.DocumentEndEvent;
+import org.yaml.snakeyaml.events.DocumentStartEvent;
+import org.yaml.snakeyaml.events.Event;
+import org.yaml.snakeyaml.events.ImplicitTuple;
+import org.yaml.snakeyaml.events.MappingEndEvent;
+import org.yaml.snakeyaml.events.MappingStartEvent;
+import org.yaml.snakeyaml.events.ScalarEvent;
+import org.yaml.snakeyaml.events.SequenceEndEvent;
+import org.yaml.snakeyaml.events.SequenceStartEvent;
+import org.yaml.snakeyaml.events.StreamEndEvent;
+import org.yaml.snakeyaml.events.StreamStartEvent;
+import org.yaml.snakeyaml.nodes.Tag;
+import org.yaml.snakeyaml.reader.StreamReader;
+import org.yaml.snakeyaml.scanner.Scanner;
+import org.yaml.snakeyaml.scanner.ScannerImpl;
+import org.yaml.snakeyaml.tokens.AliasToken;
+import org.yaml.snakeyaml.tokens.AnchorToken;
+import org.yaml.snakeyaml.tokens.BlockEntryToken;
+import org.yaml.snakeyaml.tokens.CommentToken;
+import org.yaml.snakeyaml.tokens.DirectiveToken;
+import org.yaml.snakeyaml.tokens.ScalarToken;
+import org.yaml.snakeyaml.tokens.StreamEndToken;
+import org.yaml.snakeyaml.tokens.StreamStartToken;
+import org.yaml.snakeyaml.tokens.TagToken;
+import org.yaml.snakeyaml.tokens.TagTuple;
+import org.yaml.snakeyaml.tokens.Token;
+import org.yaml.snakeyaml.util.ArrayStack;
+
+/**
+ * &lt;pre&gt;
+ * # The following YAML grammar is LL(1) and is parsed by a recursive descent
+ * parser.
+ * stream            ::= STREAM-START implicit_document? explicit_document* STREAM-END
+ * implicit_document ::= block_node DOCUMENT-END*
+ * explicit_document ::= DIRECTIVE* DOCUMENT-START block_node? DOCUMENT-END*
+ * block_node_or_indentless_sequence ::=
+ *                       ALIAS
+ *                       | properties (block_content | indentless_block_sequence)?
+ *                       | block_content
+ *                       | indentless_block_sequence
+ * block_node        ::= ALIAS
+ *                       | properties block_content?
+ *                       | block_content
+ * flow_node         ::= ALIAS
+ *                       | properties flow_content?
+ *                       | flow_content
+ * properties        ::= TAG ANCHOR? | ANCHOR TAG?
+ * block_content     ::= block_collection | flow_collection | SCALAR
+ * flow_content      ::= flow_collection | SCALAR
+ * block_collection  ::= block_sequence | block_mapping
+ * flow_collection   ::= flow_sequence | flow_mapping
+ * block_sequence    ::= BLOCK-SEQUENCE-START (BLOCK-ENTRY block_node?)* BLOCK-END
+ * indentless_sequence   ::= (BLOCK-ENTRY block_node?)+
+ * block_mapping     ::= BLOCK-MAPPING_START
+ *                       ((KEY block_node_or_indentless_sequence?)?
+ *                       (VALUE block_node_or_indentless_sequence?)?)*
+ *                       BLOCK-END
+ * flow_sequence     ::= FLOW-SEQUENCE-START
+ *                       (flow_sequence_entry FLOW-ENTRY)*
+ *                       flow_sequence_entry?
+ *                       FLOW-SEQUENCE-END
+ * flow_sequence_entry   ::= flow_node | KEY flow_node? (VALUE flow_node?)?
+ * flow_mapping      ::= FLOW-MAPPING-START
+ *                       (flow_mapping_entry FLOW-ENTRY)*
+ *                       flow_mapping_entry?
+ *                       FLOW-MAPPING-END
+ * flow_mapping_entry    ::= flow_node | KEY flow_node? (VALUE flow_node?)?
+ * FIRST sets:
+ * stream: { STREAM-START }
+ * explicit_document: { DIRECTIVE DOCUMENT-START }
+ * implicit_document: FIRST(block_node)
+ * block_node: { ALIAS TAG ANCHOR SCALAR BLOCK-SEQUENCE-START BLOCK-MAPPING-START FLOW-SEQUENCE-START FLOW-MAPPING-START }
+ * flow_node: { ALIAS ANCHOR TAG SCALAR FLOW-SEQUENCE-START FLOW-MAPPING-START }
+ * block_content: { BLOCK-SEQUENCE-START BLOCK-MAPPING-START FLOW-SEQUENCE-START FLOW-MAPPING-START SCALAR }
+ * flow_content: { FLOW-SEQUENCE-START FLOW-MAPPING-START SCALAR }
+ * block_collection: { BLOCK-SEQUENCE-START BLOCK-MAPPING-START }
+ * flow_collection: { FLOW-SEQUENCE-START FLOW-MAPPING-START }
+ * block_sequence: { BLOCK-SEQUENCE-START }
+ * block_mapping: { BLOCK-MAPPING-START }
+ * block_node_or_indentless_sequence: { ALIAS ANCHOR TAG SCALAR BLOCK-SEQUENCE-START BLOCK-MAPPING-START FLOW-SEQUENCE-START FLOW-MAPPING-START BLOCK-ENTRY }
+ * indentless_sequence: { ENTRY }
+ * flow_collection: { FLOW-SEQUENCE-START FLOW-MAPPING-START }
+ * flow_sequence: { FLOW-SEQUENCE-START }
+ * flow_mapping: { FLOW-MAPPING-START }
+ * flow_sequence_entry: { ALIAS ANCHOR TAG SCALAR FLOW-SEQUENCE-START FLOW-MAPPING-START KEY }
+ * flow_mapping_entry: { ALIAS ANCHOR TAG SCALAR FLOW-SEQUENCE-START FLOW-MAPPING-START KEY }
+ * &lt;/pre&gt;
+ * 
+ * Since writing a recursive-descendant parser is a straightforward task, we do
+ * not give many comments here.
+ */
+public class ParserImpl implements Parser {
+<span class="fc" id="L122">    private static final Map&lt;String, String&gt; DEFAULT_TAGS = new HashMap&lt;String, String&gt;();</span>
+    static {
+<span class="fc" id="L124">        DEFAULT_TAGS.put(&quot;!&quot;, &quot;!&quot;);</span>
+<span class="fc" id="L125">        DEFAULT_TAGS.put(&quot;!!&quot;, Tag.PREFIX);</span>
+<span class="fc" id="L126">    }</span>
+
+    protected final Scanner scanner;
+    private Event currentEvent;
+    private final ArrayStack&lt;Production&gt; states;
+    private final ArrayStack&lt;Mark&gt; marks;
+    private Production state;
+    private VersionTagsTuple directives;
+
+    public ParserImpl(StreamReader reader) {
+<span class="nc" id="L136">        this(new ScannerImpl(reader));</span>
+<span class="nc" id="L137">    }</span>
+
+    public ParserImpl(StreamReader reader, boolean parseComments) {
+<span class="fc" id="L140">        this(new ScannerImpl(reader).setParseComments(parseComments));</span>
+<span class="fc" id="L141">    }</span>
+
+<span class="fc" id="L143">    public ParserImpl(Scanner scanner) {</span>
+<span class="fc" id="L144">        this.scanner = scanner;</span>
+<span class="fc" id="L145">        currentEvent = null;</span>
+<span class="fc" id="L146">        directives = new VersionTagsTuple(null, new HashMap&lt;String, String&gt;(DEFAULT_TAGS));</span>
+<span class="fc" id="L147">        states = new ArrayStack&lt;Production&gt;(100);</span>
+<span class="fc" id="L148">        marks = new ArrayStack&lt;Mark&gt;(10);</span>
+<span class="fc" id="L149">        state = new ParseStreamStart();</span>
+<span class="fc" id="L150">    }</span>
+
+    /**
+     * Check the type of the next event.
+     */
+    public boolean checkEvent(Event.ID choice) {
+<span class="fc" id="L156">        peekEvent();</span>
+<span class="pc bpc" id="L157" title="1 of 4 branches missed.">        return currentEvent != null &amp;&amp; currentEvent.is(choice);</span>
+    }
+
+    /**
+     * Get the next event.
+     */
+    public Event peekEvent() {
+<span class="fc bfc" id="L164" title="All 2 branches covered.">        if (currentEvent == null) {</span>
+<span class="pc bpc" id="L165" title="1 of 2 branches missed.">            if (state != null) {</span>
+<span class="fc" id="L166">                currentEvent = state.produce();</span>
+            }
+        }
+<span class="fc" id="L169">        return currentEvent;</span>
+    }
+
+    /**
+     * Get the next event and proceed further.
+     */
+    public Event getEvent() {
+<span class="fc" id="L176">        peekEvent();</span>
+<span class="fc" id="L177">        Event value = currentEvent;</span>
+<span class="fc" id="L178">        currentEvent = null;</span>
+<span class="fc" id="L179">        return value;</span>
+    }
+
+    private CommentEvent produceCommentEvent(CommentToken token) {
+<span class="nc" id="L183">        Mark startMark = token.getStartMark();</span>
+<span class="nc" id="L184">        Mark endMark = token.getEndMark();</span>
+<span class="nc" id="L185">        String value = token.getValue();</span>
+<span class="nc" id="L186">        CommentType type = token.getCommentType();</span>
+
+        // state = state, that no change in state
+
+<span class="nc" id="L190">        return new CommentEvent(type, value, startMark, endMark);</span>
+    }
+
+    /**
+     * &lt;pre&gt;
+     * stream    ::= STREAM-START implicit_document? explicit_document* STREAM-END
+     * implicit_document ::= block_node DOCUMENT-END*
+     * explicit_document ::= DIRECTIVE* DOCUMENT-START block_node? DOCUMENT-END*
+     * &lt;/pre&gt;
+     */
+<span class="fc" id="L200">    private class ParseStreamStart implements Production {</span>
+        public Event produce() {
+            // Parse the stream start.
+<span class="fc" id="L203">            StreamStartToken token = (StreamStartToken) scanner.getToken();</span>
+<span class="fc" id="L204">            Event event = new StreamStartEvent(token.getStartMark(), token.getEndMark());</span>
+            // Prepare the next state.
+<span class="fc" id="L206">            state = new ParseImplicitDocumentStart();</span>
+<span class="fc" id="L207">            return event;</span>
+        }
+    }
+
+<span class="fc" id="L211">    private class ParseImplicitDocumentStart implements Production {</span>
+        public Event produce() {
+            // Parse an implicit document.
+<span class="pc bpc" id="L214" title="1 of 2 branches missed.">            if (scanner.checkToken(Token.ID.Comment)) {</span>
+<span class="nc" id="L215">                state = new ParseImplicitDocumentStart();</span>
+<span class="nc" id="L216">                return produceCommentEvent((CommentToken) scanner.getToken());</span>
+            }
+<span class="fc bfc" id="L218" title="All 2 branches covered.">            if (!scanner.checkToken(Token.ID.Directive, Token.ID.DocumentStart, Token.ID.StreamEnd)) {</span>
+<span class="fc" id="L219">                directives = new VersionTagsTuple(null, DEFAULT_TAGS);</span>
+<span class="fc" id="L220">                Token token = scanner.peekToken();</span>
+<span class="fc" id="L221">                Mark startMark = token.getStartMark();</span>
+<span class="fc" id="L222">                Mark endMark = startMark;</span>
+<span class="fc" id="L223">                Event event = new DocumentStartEvent(startMark, endMark, false, null, null);</span>
+                // Prepare the next state.
+<span class="fc" id="L225">                states.push(new ParseDocumentEnd());</span>
+<span class="fc" id="L226">                state = new ParseBlockNode();</span>
+<span class="fc" id="L227">                return event;</span>
+            }
+<span class="fc" id="L229">            return new ParseDocumentStart().produce();</span>
+        }
+    }
+
+<span class="fc" id="L233">    private class ParseDocumentStart implements Production {</span>
+        public Event produce() {
+<span class="pc bpc" id="L235" title="1 of 2 branches missed.">            if (scanner.checkToken(Token.ID.Comment)) {</span>
+<span class="nc" id="L236">                state = new ParseDocumentStart();</span>
+<span class="nc" id="L237">                return produceCommentEvent((CommentToken) scanner.getToken());</span>
+            }
+            // Parse any extra document end indicators.
+<span class="fc bfc" id="L240" title="All 2 branches covered.">            while (scanner.checkToken(Token.ID.DocumentEnd)) {</span>
+<span class="fc" id="L241">                scanner.getToken();</span>
+            }
+<span class="pc bpc" id="L243" title="1 of 2 branches missed.">            if (scanner.checkToken(Token.ID.Comment)) {</span>
+<span class="nc" id="L244">                state = new ParseDocumentStart();</span>
+<span class="nc" id="L245">                return produceCommentEvent((CommentToken) scanner.getToken());</span>
+            }
+            // Parse an explicit document.
+            Event event;
+<span class="fc bfc" id="L249" title="All 2 branches covered.">            if (!scanner.checkToken(Token.ID.StreamEnd)) {</span>
+<span class="fc" id="L250">                Token token = scanner.peekToken();</span>
+<span class="fc" id="L251">                Mark startMark = token.getStartMark();</span>
+<span class="fc" id="L252">                VersionTagsTuple tuple = processDirectives();</span>
+<span class="pc bpc" id="L253" title="1 of 2 branches missed.">                while (scanner.checkToken(Token.ID.Comment)) {</span>
+                    // TODO: till we figure out what todo with the comments
+<span class="nc" id="L255">                    scanner.getToken();</span>
+                }
+<span class="fc bfc" id="L257" title="All 2 branches covered.">                if (!scanner.checkToken(Token.ID.StreamEnd)) {</span>
+<span class="fc bfc" id="L258" title="All 2 branches covered.">                    if (!scanner.checkToken(Token.ID.DocumentStart)) {</span>
+<span class="fc" id="L259">                        throw new ParserException(null, null, &quot;expected '&lt;document start&gt;', but found '&quot;</span>
+<span class="fc" id="L260">                                + scanner.peekToken().getTokenId() + &quot;'&quot;, scanner.peekToken().getStartMark());</span>
+                    }
+<span class="fc" id="L262">                    token = scanner.getToken();</span>
+<span class="fc" id="L263">                    Mark endMark = token.getEndMark();</span>
+<span class="fc" id="L264">                    event = new DocumentStartEvent(startMark, endMark, true, tuple.getVersion(),</span>
+<span class="fc" id="L265">                            tuple.getTags());</span>
+<span class="fc" id="L266">                    states.push(new ParseDocumentEnd());</span>
+<span class="fc" id="L267">                    state = new ParseDocumentContent();</span>
+<span class="fc" id="L268">                    return event;</span>
+                }
+            }
+            // Parse the end of the stream.
+<span class="fc" id="L272">            StreamEndToken token = (StreamEndToken) scanner.getToken();</span>
+<span class="fc" id="L273">            event = new StreamEndEvent(token.getStartMark(), token.getEndMark());</span>
+<span class="pc bpc" id="L274" title="1 of 2 branches missed.">            if (!states.isEmpty()) {</span>
+<span class="nc" id="L275">                throw new YAMLException(&quot;Unexpected end of stream. States left: &quot; + states);</span>
+            }
+<span class="pc bpc" id="L277" title="1 of 2 branches missed.">            if (!marks.isEmpty()) {</span>
+<span class="nc" id="L278">                throw new YAMLException(&quot;Unexpected end of stream. Marks left: &quot; + marks);</span>
+            }
+<span class="fc" id="L280">            state = null;</span>
+<span class="fc" id="L281">            return event;</span>
+        }
+    }
+
+<span class="fc" id="L285">    private class ParseDocumentEnd implements Production {</span>
+        public Event produce() {
+            // Parse the document end.
+<span class="fc" id="L288">            Token token = scanner.peekToken();</span>
+<span class="fc" id="L289">            Mark startMark = token.getStartMark();</span>
+<span class="fc" id="L290">            Mark endMark = startMark;</span>
+<span class="fc" id="L291">            boolean explicit = false;</span>
+<span class="fc bfc" id="L292" title="All 2 branches covered.">            if (scanner.checkToken(Token.ID.DocumentEnd)) {</span>
+<span class="fc" id="L293">                token = scanner.getToken();</span>
+<span class="fc" id="L294">                endMark = token.getEndMark();</span>
+<span class="fc" id="L295">                explicit = true;</span>
+            }
+<span class="fc" id="L297">            Event event = new DocumentEndEvent(startMark, endMark, explicit);</span>
+            // Prepare the next state.
+<span class="fc" id="L299">            state = new ParseDocumentStart();</span>
+<span class="fc" id="L300">            return event;</span>
+        }
+    }
+
+<span class="fc" id="L304">    private class ParseDocumentContent implements Production {</span>
+        public Event produce() {
+<span class="pc bpc" id="L306" title="1 of 2 branches missed.">            if (scanner.checkToken(Token.ID.Comment)) {</span>
+<span class="nc" id="L307">                state = new ParseDocumentContent();</span>
+<span class="nc" id="L308">                return produceCommentEvent((CommentToken) scanner.getToken());</span>
+            }
+<span class="fc" id="L310">            if (scanner.checkToken(Token.ID.Directive, Token.ID.DocumentStart,</span>
+<span class="fc bfc" id="L311" title="All 2 branches covered.">                    Token.ID.DocumentEnd, Token.ID.StreamEnd)) {</span>
+<span class="fc" id="L312">                Event event = processEmptyScalar(scanner.peekToken().getStartMark());</span>
+<span class="fc" id="L313">                state = states.pop();</span>
+<span class="fc" id="L314">                return event;</span>
+            }
+<span class="fc" id="L316">            return new ParseBlockNode().produce();</span>
+        }
+    }
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    private VersionTagsTuple processDirectives() {
+<span class="fc" id="L322">        Version yamlVersion = null;</span>
+<span class="fc" id="L323">        HashMap&lt;String, String&gt; tagHandles = new HashMap&lt;String, String&gt;();</span>
+<span class="fc bfc" id="L324" title="All 2 branches covered.">        while (scanner.checkToken(Token.ID.Directive)) {</span>
+            @SuppressWarnings(&quot;rawtypes&quot;)
+<span class="fc" id="L326">            DirectiveToken token = (DirectiveToken) scanner.getToken();</span>
+<span class="pc bpc" id="L327" title="1 of 2 branches missed.">            if (token.getName().equals(&quot;YAML&quot;)) {</span>
+<span class="nc bnc" id="L328" title="All 2 branches missed.">                if (yamlVersion != null) {</span>
+<span class="nc" id="L329">                    throw new ParserException(null, null, &quot;found duplicate YAML directive&quot;,</span>
+<span class="nc" id="L330">                            token.getStartMark());</span>
+                }
+<span class="nc" id="L332">                List&lt;Integer&gt; value = (List&lt;Integer&gt;) token.getValue();</span>
+<span class="nc" id="L333">                Integer major = value.get(0);</span>
+<span class="nc bnc" id="L334" title="All 2 branches missed.">                if (major != 1) {</span>
+<span class="nc" id="L335">                    throw new ParserException(null, null,</span>
+<span class="nc" id="L336">                            &quot;found incompatible YAML document (version 1.* is required)&quot;,</span>
+<span class="nc" id="L337">                            token.getStartMark());</span>
+                }
+<span class="nc" id="L339">                Integer minor = value.get(1);</span>
+<span class="nc bnc" id="L340" title="All 2 branches missed.">                switch (minor) {</span>
+                case 0:
+<span class="nc" id="L342">                    yamlVersion = Version.V1_0;</span>
+<span class="nc" id="L343">                    break;</span>
+
+                default:
+<span class="nc" id="L346">                    yamlVersion = Version.V1_1;</span>
+                    break;
+                }
+<span class="pc bpc" id="L349" title="1 of 2 branches missed.">            } else if (token.getName().equals(&quot;TAG&quot;)) {</span>
+<span class="nc" id="L350">                List&lt;String&gt; value = (List&lt;String&gt;) token.getValue();</span>
+<span class="nc" id="L351">                String handle = value.get(0);</span>
+<span class="nc" id="L352">                String prefix = value.get(1);</span>
+<span class="nc bnc" id="L353" title="All 2 branches missed.">                if (tagHandles.containsKey(handle)) {</span>
+<span class="nc" id="L354">                    throw new ParserException(null, null, &quot;duplicate tag handle &quot; + handle,</span>
+<span class="nc" id="L355">                            token.getStartMark());</span>
+                }
+<span class="nc" id="L357">                tagHandles.put(handle, prefix);</span>
+            }
+        }
+<span class="pc bpc" id="L360" title="2 of 4 branches missed.">        if (yamlVersion != null || !tagHandles.isEmpty()) {</span>
+            // directives in the document found - drop the previous
+<span class="nc bnc" id="L362" title="All 2 branches missed.">            for (String key : DEFAULT_TAGS.keySet()) {</span>
+                // do not overwrite re-defined tags
+<span class="nc bnc" id="L364" title="All 2 branches missed.">                if (!tagHandles.containsKey(key)) {</span>
+<span class="nc" id="L365">                    tagHandles.put(key, DEFAULT_TAGS.get(key));</span>
+                }
+            }
+<span class="nc" id="L368">            directives = new VersionTagsTuple(yamlVersion, tagHandles);</span>
+        }
+<span class="fc" id="L370">        return directives;</span>
+    }
+
+    /**
+     * &lt;pre&gt;
+     *  block_node_or_indentless_sequence ::= ALIAS
+     *                | properties (block_content | indentless_block_sequence)?
+     *                | block_content
+     *                | indentless_block_sequence
+     *  block_node    ::= ALIAS
+     *                    | properties block_content?
+     *                    | block_content
+     *  flow_node     ::= ALIAS
+     *                    | properties flow_content?
+     *                    | flow_content
+     *  properties    ::= TAG ANCHOR? | ANCHOR TAG?
+     *  block_content     ::= block_collection | flow_collection | SCALAR
+     *  flow_content      ::= flow_collection | SCALAR
+     *  block_collection  ::= block_sequence | block_mapping
+     *  flow_collection   ::= flow_sequence | flow_mapping
+     * &lt;/pre&gt;
+     */
+
+<span class="fc" id="L393">    private class ParseBlockNode implements Production {</span>
+        public Event produce() {
+<span class="fc" id="L395">            return parseNode(true, false);</span>
+        }
+    }
+
+    private Event parseFlowNode() {
+<span class="fc" id="L400">        return parseNode(false, false);</span>
+    }
+
+    private Event parseBlockNodeOrIndentlessSequence() {
+<span class="fc" id="L404">        return parseNode(true, true);</span>
+    }
+
+    private Event parseNode(boolean block, boolean indentlessSequence) {
+        Event event;
+<span class="fc" id="L409">        Mark startMark = null;</span>
+<span class="fc" id="L410">        Mark endMark = null;</span>
+<span class="fc" id="L411">        Mark tagMark = null;</span>
+<span class="fc bfc" id="L412" title="All 2 branches covered.">        if (scanner.checkToken(Token.ID.Alias)) {</span>
+<span class="fc" id="L413">            AliasToken token = (AliasToken) scanner.getToken();</span>
+<span class="fc" id="L414">            event = new AliasEvent(token.getValue(), token.getStartMark(), token.getEndMark());</span>
+<span class="fc" id="L415">            state = states.pop();</span>
+<span class="fc" id="L416">        } else {</span>
+<span class="fc" id="L417">            String anchor = null;</span>
+<span class="fc" id="L418">            TagTuple tagTokenTag = null;</span>
+<span class="fc bfc" id="L419" title="All 2 branches covered.">            if (scanner.checkToken(Token.ID.Anchor)) {</span>
+<span class="fc" id="L420">                AnchorToken token = (AnchorToken) scanner.getToken();</span>
+<span class="fc" id="L421">                startMark = token.getStartMark();</span>
+<span class="fc" id="L422">                endMark = token.getEndMark();</span>
+<span class="fc" id="L423">                anchor = token.getValue();</span>
+<span class="fc bfc" id="L424" title="All 2 branches covered.">                if (scanner.checkToken(Token.ID.Tag)) {</span>
+<span class="fc" id="L425">                    TagToken tagToken = (TagToken) scanner.getToken();</span>
+<span class="fc" id="L426">                    tagMark = tagToken.getStartMark();</span>
+<span class="fc" id="L427">                    endMark = tagToken.getEndMark();</span>
+<span class="fc" id="L428">                    tagTokenTag = tagToken.getValue();</span>
+                }
+<span class="fc bfc" id="L430" title="All 2 branches covered.">            } else if (scanner.checkToken(Token.ID.Tag)) {</span>
+<span class="fc" id="L431">                TagToken tagToken = (TagToken) scanner.getToken();</span>
+<span class="fc" id="L432">                startMark = tagToken.getStartMark();</span>
+<span class="fc" id="L433">                tagMark = startMark;</span>
+<span class="fc" id="L434">                endMark = tagToken.getEndMark();</span>
+<span class="fc" id="L435">                tagTokenTag = tagToken.getValue();</span>
+<span class="fc bfc" id="L436" title="All 2 branches covered.">                if (scanner.checkToken(Token.ID.Anchor)) {</span>
+<span class="fc" id="L437">                    AnchorToken token = (AnchorToken) scanner.getToken();</span>
+<span class="fc" id="L438">                    endMark = token.getEndMark();</span>
+<span class="fc" id="L439">                    anchor = token.getValue();</span>
+                }
+            }
+<span class="fc" id="L442">            String tag = null;</span>
+<span class="fc bfc" id="L443" title="All 2 branches covered.">            if (tagTokenTag != null) {</span>
+<span class="fc" id="L444">                String handle = tagTokenTag.getHandle();</span>
+<span class="fc" id="L445">                String suffix = tagTokenTag.getSuffix();</span>
+<span class="fc bfc" id="L446" title="All 2 branches covered.">                if (handle != null) {</span>
+<span class="fc bfc" id="L447" title="All 2 branches covered.">                    if (!directives.getTags().containsKey(handle)) {</span>
+<span class="fc" id="L448">                        throw new ParserException(&quot;while parsing a node&quot;, startMark,</span>
+<span class="fc" id="L449">                                &quot;found undefined tag handle &quot; + handle, tagMark);</span>
+                    }
+<span class="fc" id="L451">                    tag = directives.getTags().get(handle) + suffix;</span>
+<span class="fc" id="L452">                } else {</span>
+<span class="fc" id="L453">                    tag = suffix;</span>
+                }
+            }
+<span class="fc bfc" id="L456" title="All 2 branches covered.">            if (startMark == null) {</span>
+<span class="fc" id="L457">                startMark = scanner.peekToken().getStartMark();</span>
+<span class="fc" id="L458">                endMark = startMark;</span>
+            }
+<span class="fc" id="L460">            event = null;</span>
+<span class="fc bfc" id="L461" title="All 4 branches covered.">            boolean implicit = tag == null || tag.equals(&quot;!&quot;);</span>
+<span class="fc bfc" id="L462" title="All 4 branches covered.">            if (indentlessSequence &amp;&amp; scanner.checkToken(Token.ID.BlockEntry)) {</span>
+<span class="fc" id="L463">                endMark = scanner.peekToken().getEndMark();</span>
+<span class="fc" id="L464">                event = new SequenceStartEvent(anchor, tag, implicit, startMark, endMark,</span>
+<span class="fc" id="L465">                        DumperOptions.FlowStyle.BLOCK);</span>
+<span class="fc" id="L466">                state = new ParseIndentlessSequenceEntryKey();</span>
+<span class="fc" id="L467">            } else {</span>
+<span class="fc bfc" id="L468" title="All 2 branches covered.">                if (scanner.checkToken(Token.ID.Scalar)) {</span>
+<span class="fc" id="L469">                    ScalarToken token = (ScalarToken) scanner.getToken();</span>
+<span class="fc" id="L470">                    endMark = token.getEndMark();</span>
+                    ImplicitTuple implicitValues;
+<span class="fc bfc" id="L472" title="All 6 branches covered.">                    if ((token.getPlain() &amp;&amp; tag == null) || &quot;!&quot;.equals(tag)) {</span>
+<span class="fc" id="L473">                        implicitValues = new ImplicitTuple(true, false);</span>
+<span class="fc bfc" id="L474" title="All 2 branches covered.">                    } else if (tag == null) {</span>
+<span class="fc" id="L475">                        implicitValues = new ImplicitTuple(false, true);</span>
+<span class="fc" id="L476">                    } else {</span>
+<span class="fc" id="L477">                        implicitValues = new ImplicitTuple(false, false);</span>
+                    }
+<span class="fc" id="L479">                    event = new ScalarEvent(anchor, tag, implicitValues, token.getValue(),</span>
+<span class="fc" id="L480">                            startMark, endMark, token.getStyle());</span>
+<span class="fc" id="L481">                    state = states.pop();</span>
+<span class="fc bfc" id="L482" title="All 2 branches covered.">                } else if (scanner.checkToken(Token.ID.FlowSequenceStart)) {</span>
+<span class="fc" id="L483">                    endMark = scanner.peekToken().getEndMark();</span>
+<span class="fc" id="L484">                    event = new SequenceStartEvent(anchor, tag, implicit, startMark, endMark,</span>
+<span class="fc" id="L485">                            DumperOptions.FlowStyle.FLOW);</span>
+<span class="fc" id="L486">                    state = new ParseFlowSequenceFirstEntry();</span>
+<span class="fc bfc" id="L487" title="All 2 branches covered.">                } else if (scanner.checkToken(Token.ID.FlowMappingStart)) {</span>
+<span class="fc" id="L488">                    endMark = scanner.peekToken().getEndMark();</span>
+<span class="fc" id="L489">                    event = new MappingStartEvent(anchor, tag, implicit, startMark, endMark,</span>
+<span class="fc" id="L490">                            DumperOptions.FlowStyle.FLOW);</span>
+<span class="fc" id="L491">                    state = new ParseFlowMappingFirstKey();</span>
+<span class="fc bfc" id="L492" title="All 4 branches covered.">                } else if (block &amp;&amp; scanner.checkToken(Token.ID.BlockSequenceStart)) {</span>
+<span class="fc" id="L493">                    endMark = scanner.peekToken().getStartMark();</span>
+<span class="fc" id="L494">                    event = new SequenceStartEvent(anchor, tag, implicit, startMark, endMark,</span>
+<span class="fc" id="L495">                            DumperOptions.FlowStyle.BLOCK);</span>
+<span class="fc" id="L496">                    state = new ParseBlockSequenceFirstEntry();</span>
+<span class="fc bfc" id="L497" title="All 4 branches covered.">                } else if (block &amp;&amp; scanner.checkToken(Token.ID.BlockMappingStart)) {</span>
+<span class="fc" id="L498">                    endMark = scanner.peekToken().getStartMark();</span>
+<span class="fc" id="L499">                    event = new MappingStartEvent(anchor, tag, implicit, startMark, endMark,</span>
+<span class="fc" id="L500">                            DumperOptions.FlowStyle.BLOCK);</span>
+<span class="fc" id="L501">                    state = new ParseBlockMappingFirstKey();</span>
+<span class="fc bfc" id="L502" title="All 4 branches covered.">                } else if (anchor != null || tag != null) {</span>
+                    // Empty scalars are allowed even if a tag or an anchor is
+                    // specified.
+<span class="fc" id="L505">                    event = new ScalarEvent(anchor, tag, new ImplicitTuple(implicit, false), &quot;&quot;,</span>
+<span class="fc" id="L506">                            startMark, endMark, DumperOptions.ScalarStyle.PLAIN);</span>
+<span class="fc" id="L507">                    state = states.pop();</span>
+<span class="fc" id="L508">                } else {</span>
+<span class="fc" id="L509">                    Token token = scanner.peekToken();</span>
+<span class="fc bfc" id="L510" title="All 2 branches covered.">                    throw new ParserException(&quot;while parsing a &quot; + (block ? &quot;block&quot; : &quot;flow&quot;) + &quot; node&quot;, startMark,</span>
+<span class="fc" id="L511">                            &quot;expected the node content, but found '&quot; + token.getTokenId() + &quot;'&quot;,</span>
+<span class="fc" id="L512">                            token.getStartMark());</span>
+                }
+            }
+        }
+<span class="fc" id="L516">        return event;</span>
+    }
+
+    // block_sequence ::= BLOCK-SEQUENCE-START (BLOCK-ENTRY block_node?)*
+    // BLOCK-END
+
+<span class="fc" id="L522">    private class ParseBlockSequenceFirstEntry implements Production {</span>
+        public Event produce() {
+<span class="fc" id="L524">            Token token = scanner.getToken();</span>
+<span class="fc" id="L525">            marks.push(token.getStartMark());</span>
+<span class="fc" id="L526">            return new ParseBlockSequenceEntryKey().produce();</span>
+        }
+    }
+
+<span class="fc" id="L530">    private class ParseBlockSequenceEntryKey implements Production {</span>
+        public Event produce() {
+<span class="pc bpc" id="L532" title="1 of 2 branches missed.">            if (scanner.checkToken(Token.ID.Comment)) {</span>
+<span class="nc" id="L533">                state = new ParseBlockSequenceEntryKey();</span>
+<span class="nc" id="L534">                return produceCommentEvent((CommentToken) scanner.getToken());</span>
+            }
+<span class="fc bfc" id="L536" title="All 2 branches covered.">            if (scanner.checkToken(Token.ID.BlockEntry)) {</span>
+<span class="fc" id="L537">                BlockEntryToken token = (BlockEntryToken) scanner.getToken();</span>
+<span class="fc" id="L538">                return new ParseBlockSequenceEntryValue(token).produce();</span>
+            }
+<span class="fc bfc" id="L540" title="All 2 branches covered.">            if (!scanner.checkToken(Token.ID.BlockEnd)) {</span>
+<span class="fc" id="L541">                Token token = scanner.peekToken();</span>
+<span class="fc" id="L542">                throw new ParserException(&quot;while parsing a block collection&quot;, marks.pop(),</span>
+<span class="fc" id="L543">                        &quot;expected &lt;block end&gt;, but found '&quot; + token.getTokenId() + &quot;'&quot;,</span>
+<span class="fc" id="L544">                        token.getStartMark());</span>
+            }
+<span class="fc" id="L546">            Token token = scanner.getToken();</span>
+<span class="fc" id="L547">            Event event = new SequenceEndEvent(token.getStartMark(), token.getEndMark());</span>
+<span class="fc" id="L548">            state = states.pop();</span>
+<span class="fc" id="L549">            marks.pop();</span>
+<span class="fc" id="L550">            return event;</span>
+        }
+    }
+
+    private class ParseBlockSequenceEntryValue implements Production {
+        BlockEntryToken token;
+
+<span class="fc" id="L557">        public ParseBlockSequenceEntryValue(final BlockEntryToken token) {</span>
+<span class="fc" id="L558">            this.token = token;</span>
+<span class="fc" id="L559">        }</span>
+
+        public Event produce() {
+<span class="pc bpc" id="L562" title="1 of 2 branches missed.">            if (scanner.checkToken(Token.ID.Comment)) {</span>
+<span class="nc" id="L563">                state = new ParseBlockSequenceEntryValue(token);</span>
+<span class="nc" id="L564">                return produceCommentEvent((CommentToken) scanner.getToken());</span>
+            }
+<span class="fc bfc" id="L566" title="All 2 branches covered.">            if (!scanner.checkToken(Token.ID.BlockEntry, Token.ID.BlockEnd)) {</span>
+<span class="fc" id="L567">                states.push(new ParseBlockSequenceEntryKey());</span>
+<span class="fc" id="L568">                return new ParseBlockNode().produce();</span>
+            } else {
+<span class="fc" id="L570">                state = new ParseBlockSequenceEntryKey();</span>
+<span class="fc" id="L571">                return processEmptyScalar(token.getEndMark());</span>
+            }
+        }
+    }
+
+    // indentless_sequence ::= (BLOCK-ENTRY block_node?)+
+
+<span class="fc" id="L578">    private class ParseIndentlessSequenceEntryKey implements Production {</span>
+        public Event produce() {
+<span class="pc bpc" id="L580" title="1 of 2 branches missed.">            if (scanner.checkToken(Token.ID.Comment)) {</span>
+<span class="nc" id="L581">                state = new ParseIndentlessSequenceEntryKey();</span>
+<span class="nc" id="L582">                return produceCommentEvent((CommentToken) scanner.getToken());</span>
+            }
+<span class="fc bfc" id="L584" title="All 2 branches covered.">            if (scanner.checkToken(Token.ID.BlockEntry)) {</span>
+<span class="fc" id="L585">                BlockEntryToken token = (BlockEntryToken) scanner.getToken();</span>
+<span class="fc" id="L586">                return new ParseIndentlessSequenceEntryValue(token).produce();</span>
+            }
+<span class="fc" id="L588">            Token token = scanner.peekToken();</span>
+<span class="fc" id="L589">            Event event = new SequenceEndEvent(token.getStartMark(), token.getEndMark());</span>
+<span class="fc" id="L590">            state = states.pop();</span>
+<span class="fc" id="L591">            return event;</span>
+        }
+    }
+
+    private class ParseIndentlessSequenceEntryValue implements Production {
+        BlockEntryToken token;
+
+<span class="fc" id="L598">        public ParseIndentlessSequenceEntryValue(final BlockEntryToken token) {</span>
+<span class="fc" id="L599">            this.token = token;</span>
+<span class="fc" id="L600">        }</span>
+
+        public Event produce() {
+<span class="pc bpc" id="L603" title="1 of 2 branches missed.">            if (scanner.checkToken(Token.ID.Comment)) {</span>
+<span class="nc" id="L604">                state = new ParseIndentlessSequenceEntryValue(token);</span>
+<span class="nc" id="L605">                return produceCommentEvent((CommentToken) scanner.getToken());</span>
+            }
+<span class="fc" id="L607">            if (!scanner.checkToken(Token.ID.BlockEntry, Token.ID.Key, Token.ID.Value,</span>
+<span class="fc bfc" id="L608" title="All 2 branches covered.">                    Token.ID.BlockEnd)) {</span>
+<span class="fc" id="L609">                states.push(new ParseIndentlessSequenceEntryKey());</span>
+<span class="fc" id="L610">                return new ParseBlockNode().produce();</span>
+            } else {
+<span class="fc" id="L612">                state = new ParseIndentlessSequenceEntryKey();</span>
+<span class="fc" id="L613">                return processEmptyScalar(token.getEndMark());</span>
+            }
+        }
+    }
+
+<span class="fc" id="L618">    private class ParseBlockMappingFirstKey implements Production {</span>
+        public Event produce() {
+<span class="fc" id="L620">            Token token = scanner.getToken();</span>
+<span class="fc" id="L621">            marks.push(token.getStartMark());</span>
+<span class="fc" id="L622">            return new ParseBlockMappingKey().produce();</span>
+        }
+    }
+
+<span class="fc" id="L626">    private class ParseBlockMappingKey implements Production {</span>
+        public Event produce() {
+<span class="pc bpc" id="L628" title="1 of 2 branches missed.">            if (scanner.checkToken(Token.ID.Comment)) {</span>
+<span class="nc" id="L629">                state = new ParseBlockMappingKey();</span>
+<span class="nc" id="L630">                return produceCommentEvent((CommentToken) scanner.getToken());</span>
+            }
+<span class="fc bfc" id="L632" title="All 2 branches covered.">            if (scanner.checkToken(Token.ID.Key)) {</span>
+<span class="fc" id="L633">                Token token = scanner.getToken();</span>
+<span class="fc bfc" id="L634" title="All 2 branches covered.">                if (!scanner.checkToken(Token.ID.Key, Token.ID.Value, Token.ID.BlockEnd)) {</span>
+<span class="fc" id="L635">                    states.push(new ParseBlockMappingValue());</span>
+<span class="fc" id="L636">                    return parseBlockNodeOrIndentlessSequence();</span>
+                } else {
+<span class="fc" id="L638">                    state = new ParseBlockMappingValue();</span>
+<span class="fc" id="L639">                    return processEmptyScalar(token.getEndMark());</span>
+                }
+            }
+<span class="fc bfc" id="L642" title="All 2 branches covered.">            if (!scanner.checkToken(Token.ID.BlockEnd)) {</span>
+<span class="fc" id="L643">                Token token = scanner.peekToken();</span>
+<span class="fc" id="L644">                throw new ParserException(&quot;while parsing a block mapping&quot;, marks.pop(),</span>
+<span class="fc" id="L645">                        &quot;expected &lt;block end&gt;, but found '&quot; + token.getTokenId() + &quot;'&quot;,</span>
+<span class="fc" id="L646">                        token.getStartMark());</span>
+            }
+<span class="fc" id="L648">            Token token = scanner.getToken();</span>
+<span class="fc" id="L649">            Event event = new MappingEndEvent(token.getStartMark(), token.getEndMark());</span>
+<span class="fc" id="L650">            state = states.pop();</span>
+<span class="fc" id="L651">            marks.pop();</span>
+<span class="fc" id="L652">            return event;</span>
+        }
+    }
+
+<span class="fc" id="L656">    private class ParseBlockMappingValue implements Production {</span>
+        public Event produce() {
+<span class="fc bfc" id="L658" title="All 2 branches covered.">            if (scanner.checkToken(Token.ID.Value)) {</span>
+<span class="fc" id="L659">                Token token = scanner.getToken();</span>
+<span class="pc bpc" id="L660" title="1 of 2 branches missed.">                if (scanner.checkToken(Token.ID.Comment)) {</span>
+<span class="nc" id="L661">                    state = new ParseBlockMappingValueComment();</span>
+<span class="nc" id="L662">                    return state.produce();</span>
+<span class="fc bfc" id="L663" title="All 2 branches covered.">                } else if (!scanner.checkToken(Token.ID.Key, Token.ID.Value, Token.ID.BlockEnd)) {</span>
+<span class="fc" id="L664">                    states.push(new ParseBlockMappingKey());</span>
+<span class="fc" id="L665">                    return parseBlockNodeOrIndentlessSequence();</span>
+                } else {
+<span class="fc" id="L667">                    state = new ParseBlockMappingKey();</span>
+<span class="fc" id="L668">                    return processEmptyScalar(token.getEndMark());</span>
+                }
+<span class="fc bfc" id="L670" title="All 2 branches covered.">            } else if(scanner.checkToken(Token.ID.Scalar)) {</span>
+<span class="fc" id="L671">                states.push(new ParseBlockMappingKey());</span>
+<span class="fc" id="L672">                return parseBlockNodeOrIndentlessSequence();</span>
+            }
+<span class="fc" id="L674">            state = new ParseBlockMappingKey();</span>
+<span class="fc" id="L675">            Token token = scanner.peekToken();</span>
+<span class="fc" id="L676">            return processEmptyScalar(token.getStartMark());</span>
+        }
+    }
+
+<span class="nc" id="L680">    private class ParseBlockMappingValueComment implements Production {</span>
+<span class="nc" id="L681">        List&lt;CommentToken&gt; tokens = new LinkedList&lt;&gt;();</span>
+
+        public Event produce() {
+<span class="nc bnc" id="L684" title="All 2 branches missed.">            if (scanner.checkToken(Token.ID.Comment)) {</span>
+<span class="nc" id="L685">                tokens.add((CommentToken) scanner.getToken());</span>
+<span class="nc" id="L686">                return produce();</span>
+<span class="nc bnc" id="L687" title="All 2 branches missed.">            } else if (!scanner.checkToken(Token.ID.Key, Token.ID.Value, Token.ID.BlockEnd)) {</span>
+<span class="nc bnc" id="L688" title="All 2 branches missed.">                if(!tokens.isEmpty()) {</span>
+<span class="nc" id="L689">                    return produceCommentEvent(tokens.remove(0));</span>
+                }
+<span class="nc" id="L691">                states.push(new ParseBlockMappingKey());</span>
+<span class="nc" id="L692">                return parseBlockNodeOrIndentlessSequence();</span>
+            } else {
+<span class="nc" id="L694">                state = new ParseBlockMappingValueCommentList(tokens);</span>
+<span class="nc" id="L695">                return processEmptyScalar(scanner.peekToken().getStartMark());</span>
+            }
+        }
+    }
+
+    private class ParseBlockMappingValueCommentList implements Production {
+        List&lt;CommentToken&gt; tokens;
+
+<span class="nc" id="L703">        public ParseBlockMappingValueCommentList(final List&lt;CommentToken&gt; tokens) {</span>
+<span class="nc" id="L704">            this.tokens = tokens;</span>
+<span class="nc" id="L705">        }</span>
+
+        public Event produce() {
+<span class="nc bnc" id="L708" title="All 2 branches missed.">            if(!tokens.isEmpty()) {</span>
+<span class="nc" id="L709">                return produceCommentEvent(tokens.remove(0));</span>
+            }
+<span class="nc" id="L711">            return new ParseBlockMappingKey().produce();</span>
+        }
+    }
+
+    /**
+     * &lt;pre&gt;
+     * flow_sequence     ::= FLOW-SEQUENCE-START
+     *                       (flow_sequence_entry FLOW-ENTRY)*
+     *                       flow_sequence_entry?
+     *                       FLOW-SEQUENCE-END
+     * flow_sequence_entry   ::= flow_node | KEY flow_node? (VALUE flow_node?)?
+     * Note that while production rules for both flow_sequence_entry and
+     * flow_mapping_entry are equal, their interpretations are different.
+     * For `flow_sequence_entry`, the part `KEY flow_node? (VALUE flow_node?)?`
+     * generate an inline mapping (set syntax).
+     * &lt;/pre&gt;
+     */
+<span class="fc" id="L728">    private class ParseFlowSequenceFirstEntry implements Production {</span>
+        public Event produce() {
+<span class="fc" id="L730">            Token token = scanner.getToken();</span>
+<span class="fc" id="L731">            marks.push(token.getStartMark());</span>
+<span class="fc" id="L732">            return new ParseFlowSequenceEntry(true).produce();</span>
+        }
+    }
+
+    private class ParseFlowSequenceEntry implements Production {
+        private final boolean first;
+
+<span class="fc" id="L739">        public ParseFlowSequenceEntry(boolean first) {</span>
+<span class="fc" id="L740">            this.first = first;</span>
+<span class="fc" id="L741">        }</span>
+
+        public Event produce() {
+<span class="pc bpc" id="L744" title="1 of 2 branches missed.">            if (scanner.checkToken(Token.ID.Comment)) {</span>
+<span class="nc" id="L745">                state = new ParseFlowSequenceEntry(first);</span>
+<span class="nc" id="L746">                return produceCommentEvent((CommentToken) scanner.getToken());</span>
+            }
+<span class="fc bfc" id="L748" title="All 2 branches covered.">            if (!scanner.checkToken(Token.ID.FlowSequenceEnd)) {</span>
+<span class="fc bfc" id="L749" title="All 2 branches covered.">                if (!first) {</span>
+<span class="fc bfc" id="L750" title="All 2 branches covered.">                    if (scanner.checkToken(Token.ID.FlowEntry)) {</span>
+<span class="fc" id="L751">                        scanner.getToken();</span>
+<span class="pc bpc" id="L752" title="1 of 2 branches missed.">                        if (scanner.checkToken(Token.ID.Comment)) {</span>
+<span class="nc" id="L753">                            state = new ParseFlowSequenceEntry(true);</span>
+<span class="nc" id="L754">                            return produceCommentEvent((CommentToken) scanner.getToken());</span>
+                        }
+                    } else {
+<span class="fc" id="L757">                        Token token = scanner.peekToken();</span>
+<span class="fc" id="L758">                        throw new ParserException(&quot;while parsing a flow sequence&quot;, marks.pop(),</span>
+<span class="fc" id="L759">                                &quot;expected ',' or ']', but got &quot; + token.getTokenId(),</span>
+<span class="fc" id="L760">                                token.getStartMark());</span>
+                    }
+                }
+<span class="fc bfc" id="L763" title="All 2 branches covered.">                if (scanner.checkToken(Token.ID.Key)) {</span>
+<span class="fc" id="L764">                    Token token = scanner.peekToken();</span>
+<span class="fc" id="L765">                    Event event = new MappingStartEvent(null, null, true, token.getStartMark(),</span>
+<span class="fc" id="L766">                            token.getEndMark(), DumperOptions.FlowStyle.FLOW);</span>
+<span class="fc" id="L767">                    state = new ParseFlowSequenceEntryMappingKey();</span>
+<span class="fc" id="L768">                    return event;</span>
+<span class="fc bfc" id="L769" title="All 2 branches covered.">                } else if (!scanner.checkToken(Token.ID.FlowSequenceEnd)) {</span>
+<span class="fc" id="L770">                    states.push(new ParseFlowSequenceEntry(false));</span>
+<span class="fc" id="L771">                    return parseFlowNode();</span>
+                }
+            }
+<span class="fc" id="L774">            Token token = scanner.getToken();</span>
+<span class="fc" id="L775">            Event event = new SequenceEndEvent(token.getStartMark(), token.getEndMark());</span>
+<span class="pc bpc" id="L776" title="1 of 2 branches missed.">            if(!scanner.checkToken(Token.ID.Comment)) {</span>
+<span class="fc" id="L777">                state = states.pop();</span>
+<span class="fc" id="L778">            } else {</span>
+<span class="nc" id="L779">                state = new ParseFlowEndComment();</span>
+            }
+<span class="fc" id="L781">            marks.pop();</span>
+<span class="fc" id="L782">            return event;</span>
+        }
+    }
+
+<span class="nc" id="L786">    private class ParseFlowEndComment implements Production {</span>
+        public Event produce() {
+<span class="nc" id="L788">            Event event = produceCommentEvent((CommentToken)scanner.getToken());</span>
+<span class="nc bnc" id="L789" title="All 2 branches missed.">            if(!scanner.checkToken(Token.ID.Comment)) {</span>
+<span class="nc" id="L790">                state = states.pop();</span>
+            }
+<span class="nc" id="L792">            return event;</span>
+        }
+    }
+
+<span class="fc" id="L796">    private class ParseFlowSequenceEntryMappingKey implements Production {</span>
+        public Event produce() {
+<span class="fc" id="L798">            Token token = scanner.getToken();</span>
+<span class="fc bfc" id="L799" title="All 2 branches covered.">            if (!scanner.checkToken(Token.ID.Value, Token.ID.FlowEntry, Token.ID.FlowSequenceEnd)) {</span>
+<span class="fc" id="L800">                states.push(new ParseFlowSequenceEntryMappingValue());</span>
+<span class="fc" id="L801">                return parseFlowNode();</span>
+            } else {
+<span class="fc" id="L803">                state = new ParseFlowSequenceEntryMappingValue();</span>
+<span class="fc" id="L804">                return processEmptyScalar(token.getEndMark());</span>
+            }
+        }
+    }
+
+<span class="fc" id="L809">    private class ParseFlowSequenceEntryMappingValue implements Production {</span>
+        public Event produce() {
+<span class="fc bfc" id="L811" title="All 2 branches covered.">            if (scanner.checkToken(Token.ID.Value)) {</span>
+<span class="fc" id="L812">                Token token = scanner.getToken();</span>
+<span class="fc bfc" id="L813" title="All 2 branches covered.">                if (!scanner.checkToken(Token.ID.FlowEntry, Token.ID.FlowSequenceEnd)) {</span>
+<span class="fc" id="L814">                    states.push(new ParseFlowSequenceEntryMappingEnd());</span>
+<span class="fc" id="L815">                    return parseFlowNode();</span>
+                } else {
+<span class="fc" id="L817">                    state = new ParseFlowSequenceEntryMappingEnd();</span>
+<span class="fc" id="L818">                    return processEmptyScalar(token.getEndMark());</span>
+                }
+            } else {
+<span class="fc" id="L821">                state = new ParseFlowSequenceEntryMappingEnd();</span>
+<span class="fc" id="L822">                Token token = scanner.peekToken();</span>
+<span class="fc" id="L823">                return processEmptyScalar(token.getStartMark());</span>
+            }
+        }
+    }
+
+<span class="fc" id="L828">    private class ParseFlowSequenceEntryMappingEnd implements Production {</span>
+        public Event produce() {
+<span class="fc" id="L830">            state = new ParseFlowSequenceEntry(false);</span>
+<span class="fc" id="L831">            Token token = scanner.peekToken();</span>
+<span class="fc" id="L832">            return new MappingEndEvent(token.getStartMark(), token.getEndMark());</span>
+        }
+    }
+
+    /**
+     * &lt;pre&gt;
+     *   flow_mapping  ::= FLOW-MAPPING-START
+     *          (flow_mapping_entry FLOW-ENTRY)*
+     *          flow_mapping_entry?
+     *          FLOW-MAPPING-END
+     *   flow_mapping_entry    ::= flow_node | KEY flow_node? (VALUE flow_node?)?
+     * &lt;/pre&gt;
+     */
+<span class="fc" id="L845">    private class ParseFlowMappingFirstKey implements Production {</span>
+        public Event produce() {
+<span class="fc" id="L847">            Token token = scanner.getToken();</span>
+<span class="fc" id="L848">            marks.push(token.getStartMark());</span>
+<span class="fc" id="L849">            return new ParseFlowMappingKey(true).produce();</span>
+        }
+    }
+
+    private class ParseFlowMappingKey implements Production {
+<span class="fc" id="L854">        private boolean first = false;</span>
+
+<span class="fc" id="L856">        public ParseFlowMappingKey(boolean first) {</span>
+<span class="fc" id="L857">            this.first = first;</span>
+<span class="fc" id="L858">        }</span>
+
+        public Event produce() {
+<span class="fc bfc" id="L861" title="All 2 branches covered.">            if (!scanner.checkToken(Token.ID.FlowMappingEnd)) {</span>
+<span class="fc bfc" id="L862" title="All 2 branches covered.">                if (!first) {</span>
+<span class="fc bfc" id="L863" title="All 2 branches covered.">                    if (scanner.checkToken(Token.ID.FlowEntry)) {</span>
+<span class="fc" id="L864">                        scanner.getToken();</span>
+<span class="fc" id="L865">                    } else {</span>
+<span class="fc" id="L866">                        Token token = scanner.peekToken();</span>
+<span class="fc" id="L867">                        throw new ParserException(&quot;while parsing a flow mapping&quot;, marks.pop(),</span>
+<span class="fc" id="L868">                                &quot;expected ',' or '}', but got &quot; + token.getTokenId(),</span>
+<span class="fc" id="L869">                                token.getStartMark());</span>
+                    }
+                }
+<span class="fc bfc" id="L872" title="All 2 branches covered.">                if (scanner.checkToken(Token.ID.Key)) {</span>
+<span class="fc" id="L873">                    Token token = scanner.getToken();</span>
+<span class="fc" id="L874">                    if (!scanner.checkToken(Token.ID.Value, Token.ID.FlowEntry,</span>
+<span class="fc bfc" id="L875" title="All 2 branches covered.">                            Token.ID.FlowMappingEnd)) {</span>
+<span class="fc" id="L876">                        states.push(new ParseFlowMappingValue());</span>
+<span class="fc" id="L877">                        return parseFlowNode();</span>
+                    } else {
+<span class="fc" id="L879">                        state = new ParseFlowMappingValue();</span>
+<span class="fc" id="L880">                        return processEmptyScalar(token.getEndMark());</span>
+                    }
+<span class="fc bfc" id="L882" title="All 2 branches covered.">                } else if (!scanner.checkToken(Token.ID.FlowMappingEnd)) {</span>
+<span class="fc" id="L883">                    states.push(new ParseFlowMappingEmptyValue());</span>
+<span class="fc" id="L884">                    return parseFlowNode();</span>
+                }
+            }
+<span class="fc" id="L887">            Token token = scanner.getToken();</span>
+<span class="fc" id="L888">            Event event = new MappingEndEvent(token.getStartMark(), token.getEndMark());</span>
+<span class="fc" id="L889">            marks.pop();</span>
+<span class="pc bpc" id="L890" title="1 of 2 branches missed.">            if(!scanner.checkToken(Token.ID.Comment)) {</span>
+<span class="fc" id="L891">                state = states.pop();               </span>
+<span class="fc" id="L892">            } else {</span>
+<span class="nc" id="L893">                state = new ParseFlowEndComment();</span>
+            }
+<span class="fc" id="L895">            return event;            </span>
+        }
+    }
+
+<span class="fc" id="L899">    private class ParseFlowMappingValue implements Production {</span>
+        public Event produce() {
+<span class="fc bfc" id="L901" title="All 2 branches covered.">            if (scanner.checkToken(Token.ID.Value)) {</span>
+<span class="fc" id="L902">                Token token = scanner.getToken();</span>
+<span class="fc bfc" id="L903" title="All 2 branches covered.">                if (!scanner.checkToken(Token.ID.FlowEntry, Token.ID.FlowMappingEnd)) {</span>
+<span class="fc" id="L904">                    states.push(new ParseFlowMappingKey(false));</span>
+<span class="fc" id="L905">                    return parseFlowNode();</span>
+                } else {
+<span class="fc" id="L907">                    state = new ParseFlowMappingKey(false);</span>
+<span class="fc" id="L908">                    return processEmptyScalar(token.getEndMark());</span>
+                }
+            } else {
+<span class="fc" id="L911">                state = new ParseFlowMappingKey(false);</span>
+<span class="fc" id="L912">                Token token = scanner.peekToken();</span>
+<span class="fc" id="L913">                return processEmptyScalar(token.getStartMark());</span>
+            }
+        }
+    }
+
+<span class="fc" id="L918">    private class ParseFlowMappingEmptyValue implements Production {</span>
+        public Event produce() {
+<span class="fc" id="L920">            state = new ParseFlowMappingKey(false);</span>
+<span class="fc" id="L921">            return processEmptyScalar(scanner.peekToken().getStartMark());</span>
+        }
+    }
+
+    /**
+     * &lt;pre&gt;
+     * block_mapping     ::= BLOCK-MAPPING_START
+     *           ((KEY block_node_or_indentless_sequence?)?
+     *           (VALUE block_node_or_indentless_sequence?)?)*
+     *           BLOCK-END
+     * &lt;/pre&gt;
+     */
+    private Event processEmptyScalar(Mark mark) {
+<span class="fc" id="L934">        return new ScalarEvent(null, null, new ImplicitTuple(true, false), &quot;&quot;, mark, mark, DumperOptions.ScalarStyle.PLAIN);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

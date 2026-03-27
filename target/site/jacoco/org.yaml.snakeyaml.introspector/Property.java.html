@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Property.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.introspector</a> &gt; <span class="el_source">Property.java</span></div><h1>Property.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.introspector;
+
+import java.lang.annotation.Annotation;
+import java.util.List;
+
+/**
+ * &lt;p&gt;
+ * A &lt;code&gt;Property&lt;/code&gt; represents a single member variable of a class,
+ * possibly including its accessor methods (getX, setX). The name stored in this
+ * class is the actual name of the property as given for the class, not an
+ * alias.
+ * &lt;/p&gt;
+ *
+ * &lt;p&gt;
+ * Objects of this class have a total ordering which defaults to ordering based
+ * on the name of the property.
+ * &lt;/p&gt;
+ */
+public abstract class Property implements Comparable&lt;Property&gt; {
+
+    private final String name;
+    private final Class&lt;?&gt; type;
+
+<span class="fc" id="L39">    public Property(String name, Class&lt;?&gt; type) {</span>
+<span class="fc" id="L40">        this.name = name;</span>
+<span class="fc" id="L41">        this.type = type;</span>
+<span class="fc" id="L42">    }</span>
+
+    public Class&lt;?&gt; getType() {
+<span class="nc" id="L45">        return type;</span>
+    }
+
+    abstract public Class&lt;?&gt;[] getActualTypeArguments();
+
+    public String getName() {
+<span class="nc" id="L51">        return name;</span>
+    }
+
+    @Override
+    public String toString() {
+<span class="nc" id="L56">        return getName() + &quot; of &quot; + getType();</span>
+    }
+
+    public int compareTo(Property o) {
+<span class="nc" id="L60">        return getName().compareTo(o.getName());</span>
+    }
+
+    public boolean isWritable() {
+<span class="nc" id="L64">        return true;</span>
+    }
+
+    public boolean isReadable() {
+<span class="nc" id="L68">        return true;</span>
+    }
+
+    abstract public void set(Object object, Object value) throws Exception;
+
+    abstract public Object get(Object object);
+
+    /**
+     * Returns the annotations that are present on this property or empty {@code List} if there're no annotations.
+     *
+     * @return the annotations that are present on this property or empty {@code List} if there're no annotations
+     */
+    abstract public List&lt;Annotation&gt; getAnnotations();
+
+    /**
+     * Returns property's annotation for the given type or {@code null} if it's not present.
+     *
+     * @param annotationType the type of the annotation to be returned
+     * @param &lt;A&gt; class of the annotation
+     *
+     * @return property's annotation for the given type or {@code null} if it's not present
+     */
+    abstract public &lt;A extends Annotation&gt; A getAnnotation(Class&lt;A&gt; annotationType);
+
+    @Override
+    public int hashCode() {
+<span class="nc" id="L94">        return getName().hashCode() + getType().hashCode();</span>
+    }
+
+    @Override
+    public boolean equals(Object other) {
+<span class="nc bnc" id="L99" title="All 2 branches missed.">        if (other instanceof Property) {</span>
+<span class="nc" id="L100">            Property p = (Property) other;</span>
+<span class="nc bnc" id="L101" title="All 4 branches missed.">            return getName().equals(p.getName()) &amp;&amp; getType().equals(p.getType());</span>
+        }
+<span class="nc" id="L103">        return false;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

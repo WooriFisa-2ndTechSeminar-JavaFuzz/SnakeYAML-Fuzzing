@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>PropertySubstitute.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.introspector</a> &gt; <span class="el_source">PropertySubstitute.java</span></div><h1>PropertySubstitute.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.introspector;
+
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Array;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import org.yaml.snakeyaml.error.YAMLException;
+
+// TODO: decide priorities for get/set Read/Field/Delegate Write/Field/Delegate - is FIELD on the correct place ?
+public class PropertySubstitute extends Property {
+
+<span class="nc" id="L36">    final private static Logger log = Logger.getLogger(PropertySubstitute.class.getPackage()</span>
+<span class="nc" id="L37">            .getName());</span>
+
+    protected Class&lt;?&gt; targetType;
+    private final String readMethod;
+    private final String writeMethod;
+    transient private Method read;
+    transient private Method write;
+    private Field field;
+    protected Class&lt;?&gt;[] parameters;
+    private Property delegate;
+    private boolean filler;
+
+    public PropertySubstitute(String name, Class&lt;?&gt; type, String readMethod, String writeMethod,
+            Class&lt;?&gt;... params) {
+<span class="nc" id="L51">        super(name, type);</span>
+<span class="nc" id="L52">        this.readMethod = readMethod;</span>
+<span class="nc" id="L53">        this.writeMethod = writeMethod;</span>
+<span class="nc" id="L54">        setActualTypeArguments(params);</span>
+<span class="nc" id="L55">        this.filler = false;</span>
+<span class="nc" id="L56">    }</span>
+
+    public PropertySubstitute(String name, Class&lt;?&gt; type, Class&lt;?&gt;... params) {
+<span class="nc" id="L59">        this(name, type, null, null, params);</span>
+<span class="nc" id="L60">    }</span>
+
+    @Override
+    public Class&lt;?&gt;[] getActualTypeArguments() {
+<span class="nc bnc" id="L64" title="All 4 branches missed.">        if (parameters == null &amp;&amp; delegate != null) {</span>
+<span class="nc" id="L65">            return delegate.getActualTypeArguments();</span>
+        }
+<span class="nc" id="L67">        return parameters;</span>
+    }
+
+    public void setActualTypeArguments(Class&lt;?&gt;... args) {
+<span class="nc bnc" id="L71" title="All 4 branches missed.">        if (args != null &amp;&amp; args.length &gt; 0) {</span>
+<span class="nc" id="L72">            parameters = args;</span>
+<span class="nc" id="L73">        } else {</span>
+<span class="nc" id="L74">            parameters = null;</span>
+        }
+<span class="nc" id="L76">    }</span>
+
+    @Override
+    public void set(Object object, Object value) throws Exception {
+<span class="nc bnc" id="L80" title="All 2 branches missed.">        if (write != null) {</span>
+<span class="nc bnc" id="L81" title="All 2 branches missed.">            if (!filler) {</span>
+<span class="nc" id="L82">                write.invoke(object, value);</span>
+<span class="nc bnc" id="L83" title="All 2 branches missed.">            } else if (value != null) {</span>
+<span class="nc bnc" id="L84" title="All 2 branches missed.">                if (value instanceof Collection&lt;?&gt;) {</span>
+<span class="nc" id="L85">                    Collection&lt;?&gt; collection = (Collection&lt;?&gt;) value;</span>
+<span class="nc bnc" id="L86" title="All 2 branches missed.">                    for (Object val : collection) {</span>
+<span class="nc" id="L87">                        write.invoke(object, val);</span>
+                    }
+<span class="nc bnc" id="L89" title="All 2 branches missed.">                } else if (value instanceof Map&lt;?, ?&gt;) {</span>
+<span class="nc" id="L90">                    Map&lt;?, ?&gt; map = (Map&lt;?, ?&gt;) value;</span>
+<span class="nc bnc" id="L91" title="All 2 branches missed.">                    for (Entry&lt;?, ?&gt; entry : map.entrySet()) {</span>
+<span class="nc" id="L92">                        write.invoke(object, entry.getKey(), entry.getValue());</span>
+                    }
+<span class="nc bnc" id="L94" title="All 2 branches missed.">                } else if (value.getClass().isArray()) { // TODO: maybe arrays</span>
+                                                         // need 2 fillers like
+                                                         // SET(index, value)
+                                                         // add ADD(value)
+<span class="nc" id="L98">                    int len = Array.getLength(value);</span>
+<span class="nc bnc" id="L99" title="All 2 branches missed.">                    for (int i = 0; i &lt; len; i++) {</span>
+<span class="nc" id="L100">                        write.invoke(object, Array.get(value, i));</span>
+                    }
+                }
+            }
+<span class="nc bnc" id="L104" title="All 2 branches missed.">        } else if (field != null) {</span>
+<span class="nc" id="L105">            field.set(object, value);</span>
+<span class="nc bnc" id="L106" title="All 2 branches missed.">        } else if (delegate != null) {</span>
+<span class="nc" id="L107">            delegate.set(object, value);</span>
+<span class="nc" id="L108">        } else {</span>
+<span class="nc" id="L109">            log.warning(&quot;No setter/delegate for '&quot; + getName() + &quot;' on object &quot; + object);</span>
+        }
+        // TODO: maybe throw YAMLException here
+<span class="nc" id="L112">    }</span>
+
+    @Override
+    public Object get(Object object) {
+        try {
+<span class="nc bnc" id="L117" title="All 2 branches missed.">            if (read != null) {</span>
+<span class="nc" id="L118">                return read.invoke(object);</span>
+<span class="nc bnc" id="L119" title="All 2 branches missed.">            } else if (field != null) {</span>
+<span class="nc" id="L120">                return field.get(object);</span>
+            }
+<span class="nc" id="L122">        } catch (Exception e) {</span>
+<span class="nc" id="L123">            throw new YAMLException(&quot;Unable to find getter for property '&quot; + getName()</span>
+<span class="nc" id="L124">                    + &quot;' on object &quot; + object + &quot;:&quot; + e);</span>
+        }
+
+<span class="nc bnc" id="L127" title="All 2 branches missed.">        if (delegate != null) {</span>
+<span class="nc" id="L128">            return delegate.get(object);</span>
+        }
+<span class="nc" id="L130">        throw new YAMLException(&quot;No getter or delegate for property '&quot; + getName() + &quot;' on object &quot;</span>
+<span class="nc" id="L131">                + object);</span>
+    }
+
+    @Override
+    public List&lt;Annotation&gt; getAnnotations() {
+<span class="nc" id="L136">        Annotation[] annotations = null;</span>
+<span class="nc bnc" id="L137" title="All 2 branches missed.">        if (read != null) {</span>
+<span class="nc" id="L138">            annotations = read.getAnnotations();</span>
+<span class="nc bnc" id="L139" title="All 2 branches missed.">        } else if (field != null) {</span>
+<span class="nc" id="L140">            annotations = field.getAnnotations();</span>
+        }
+<span class="nc bnc" id="L142" title="All 2 branches missed.">        return annotations != null ? Arrays.asList(annotations) : delegate.getAnnotations();</span>
+    }
+
+    @Override
+    public &lt;A extends Annotation&gt; A getAnnotation(Class&lt;A&gt; annotationType) {
+        A annotation;
+<span class="nc bnc" id="L148" title="All 2 branches missed.">        if (read != null) {</span>
+<span class="nc" id="L149">            annotation = read.getAnnotation(annotationType);</span>
+<span class="nc bnc" id="L150" title="All 2 branches missed.">        } else if (field != null) {</span>
+<span class="nc" id="L151">            annotation = field.getAnnotation(annotationType);</span>
+<span class="nc" id="L152">        } else {</span>
+<span class="nc" id="L153">            annotation = delegate.getAnnotation(annotationType);</span>
+        }
+<span class="nc" id="L155">        return annotation;</span>
+    }
+
+    public void setTargetType(Class&lt;?&gt; targetType) {
+<span class="nc bnc" id="L159" title="All 2 branches missed.">        if (this.targetType != targetType) {</span>
+<span class="nc" id="L160">            this.targetType = targetType;</span>
+
+<span class="nc" id="L162">            final String name = getName();</span>
+<span class="nc bnc" id="L163" title="All 2 branches missed.">            for (Class&lt;?&gt; c = targetType; c != null; c = c.getSuperclass()) {</span>
+<span class="nc bnc" id="L164" title="All 2 branches missed.">                for (Field f : c.getDeclaredFields()) {</span>
+<span class="nc bnc" id="L165" title="All 2 branches missed.">                    if (f.getName().equals(name)) {</span>
+<span class="nc" id="L166">                        int modifiers = f.getModifiers();</span>
+<span class="nc bnc" id="L167" title="All 4 branches missed.">                        if (!Modifier.isStatic(modifiers) &amp;&amp; !Modifier.isTransient(modifiers)) {</span>
+<span class="nc" id="L168">                            f.setAccessible(true);</span>
+<span class="nc" id="L169">                            field = f;</span>
+                        }
+<span class="nc" id="L171">                        break;</span>
+                    }
+                }
+            }
+<span class="nc bnc" id="L175" title="All 4 branches missed.">            if (field == null &amp;&amp; log.isLoggable(Level.FINE)) {</span>
+<span class="nc" id="L176">                log.fine(String.format(&quot;Failed to find field for %s.%s&quot;, targetType.getName(),</span>
+<span class="nc" id="L177">                        getName()));</span>
+            }
+
+            // Retrieve needed info
+<span class="nc bnc" id="L181" title="All 2 branches missed.">            if (readMethod != null) {</span>
+<span class="nc" id="L182">                read = discoverMethod(targetType, readMethod);</span>
+            }
+<span class="nc bnc" id="L184" title="All 2 branches missed.">            if (writeMethod != null) {</span>
+<span class="nc" id="L185">                filler = false;</span>
+<span class="nc" id="L186">                write = discoverMethod(targetType, writeMethod, getType());</span>
+<span class="nc bnc" id="L187" title="All 4 branches missed.">                if (write == null &amp;&amp; parameters != null) {</span>
+<span class="nc" id="L188">                    filler = true;</span>
+<span class="nc" id="L189">                    write = discoverMethod(targetType, writeMethod, parameters);</span>
+                }
+            }
+        }
+<span class="nc" id="L193">    }</span>
+
+    private Method discoverMethod(Class&lt;?&gt; type, String name, Class&lt;?&gt;... params) {
+<span class="nc bnc" id="L196" title="All 2 branches missed.">        for (Class&lt;?&gt; c = type; c != null; c = c.getSuperclass()) {</span>
+<span class="nc bnc" id="L197" title="All 2 branches missed.">            for (Method method : c.getDeclaredMethods()) {</span>
+<span class="nc bnc" id="L198" title="All 2 branches missed.">                if (name.equals(method.getName())) {</span>
+<span class="nc" id="L199">                    Class&lt;?&gt;[] parameterTypes = method.getParameterTypes();</span>
+<span class="nc bnc" id="L200" title="All 2 branches missed.">                    if (parameterTypes.length != params.length) {</span>
+<span class="nc" id="L201">                        continue;</span>
+                    }
+<span class="nc" id="L203">                    boolean found = true;</span>
+<span class="nc bnc" id="L204" title="All 2 branches missed.">                    for (int i = 0; i &lt; parameterTypes.length; i++) {</span>
+<span class="nc bnc" id="L205" title="All 2 branches missed.">                        if (!parameterTypes[i].isAssignableFrom(params[i])) {</span>
+<span class="nc" id="L206">                            found = false;</span>
+                        }
+                    }
+<span class="nc bnc" id="L209" title="All 2 branches missed.">                    if (found) {</span>
+<span class="nc" id="L210">                        method.setAccessible(true);</span>
+<span class="nc" id="L211">                        return method;</span>
+                    }
+                }
+            }
+        }
+<span class="nc bnc" id="L216" title="All 2 branches missed.">        if (log.isLoggable(Level.FINE)) {</span>
+<span class="nc" id="L217">            log.fine(String.format(&quot;Failed to find [%s(%d args)] for %s.%s&quot;, name, params.length,</span>
+<span class="nc" id="L218">                    targetType.getName(), getName()));</span>
+        }
+<span class="nc" id="L220">        return null;</span>
+    }
+
+    @Override
+    public String getName() {
+<span class="nc" id="L225">        final String n = super.getName();</span>
+<span class="nc bnc" id="L226" title="All 2 branches missed.">        if (n != null) {</span>
+<span class="nc" id="L227">            return n;</span>
+        }
+<span class="nc bnc" id="L229" title="All 2 branches missed.">        return delegate != null ? delegate.getName() : null;</span>
+    }
+
+    @Override
+    public Class&lt;?&gt; getType() {
+<span class="nc" id="L234">        final Class&lt;?&gt; t = super.getType();</span>
+<span class="nc bnc" id="L235" title="All 2 branches missed.">        if (t != null) {</span>
+<span class="nc" id="L236">            return t;</span>
+        }
+<span class="nc bnc" id="L238" title="All 2 branches missed.">        return delegate != null ? delegate.getType() : null;</span>
+    }
+
+    @Override
+    public boolean isReadable() {
+<span class="nc bnc" id="L243" title="All 8 branches missed.">        return (read != null) || (field != null) || (delegate != null &amp;&amp; delegate.isReadable());</span>
+    }
+
+    @Override
+    public boolean isWritable() {
+<span class="nc bnc" id="L248" title="All 8 branches missed.">        return (write != null) || (field != null) || (delegate != null &amp;&amp; delegate.isWritable());</span>
+    }
+
+    public void setDelegate(Property delegate) {
+<span class="nc" id="L252">        this.delegate = delegate;</span>
+<span class="nc bnc" id="L253" title="All 6 branches missed.">        if (writeMethod != null &amp;&amp; write == null &amp;&amp; !filler) {</span>
+<span class="nc" id="L254">            filler = true;</span>
+<span class="nc" id="L255">            write = discoverMethod(targetType, writeMethod, getActualTypeArguments());</span>
+        }
+<span class="nc" id="L257">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

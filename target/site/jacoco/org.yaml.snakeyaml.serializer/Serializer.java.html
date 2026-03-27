@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Serializer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.serializer</a> &gt; <span class="el_source">Serializer.java</span></div><h1>Serializer.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.serializer;
+
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.yaml.snakeyaml.DumperOptions;
+import org.yaml.snakeyaml.DumperOptions.Version;
+import org.yaml.snakeyaml.comments.CommentLine;
+import org.yaml.snakeyaml.emitter.Emitable;
+import org.yaml.snakeyaml.events.AliasEvent;
+import org.yaml.snakeyaml.events.CommentEvent;
+import org.yaml.snakeyaml.events.DocumentEndEvent;
+import org.yaml.snakeyaml.events.DocumentStartEvent;
+import org.yaml.snakeyaml.events.ImplicitTuple;
+import org.yaml.snakeyaml.events.MappingEndEvent;
+import org.yaml.snakeyaml.events.MappingStartEvent;
+import org.yaml.snakeyaml.events.ScalarEvent;
+import org.yaml.snakeyaml.events.SequenceEndEvent;
+import org.yaml.snakeyaml.events.SequenceStartEvent;
+import org.yaml.snakeyaml.events.StreamEndEvent;
+import org.yaml.snakeyaml.events.StreamStartEvent;
+import org.yaml.snakeyaml.nodes.AnchorNode;
+import org.yaml.snakeyaml.nodes.MappingNode;
+import org.yaml.snakeyaml.nodes.Node;
+import org.yaml.snakeyaml.nodes.NodeId;
+import org.yaml.snakeyaml.nodes.NodeTuple;
+import org.yaml.snakeyaml.nodes.ScalarNode;
+import org.yaml.snakeyaml.nodes.SequenceNode;
+import org.yaml.snakeyaml.nodes.Tag;
+import org.yaml.snakeyaml.resolver.Resolver;
+
+public final class Serializer {
+    private final Emitable emitter;
+    private final Resolver resolver;
+    private boolean explicitStart;
+    private boolean explicitEnd;
+    private Version useVersion;
+    private Map&lt;String, String&gt; useTags;
+    private Set&lt;Node&gt; serializedNodes;
+    private Map&lt;Node, String&gt; anchors;
+    private AnchorGenerator anchorGenerator;
+    private Boolean closed;
+    private Tag explicitRoot;
+
+<span class="nc" id="L64">    public Serializer(Emitable emitter, Resolver resolver, DumperOptions opts, Tag rootTag) {</span>
+<span class="nc" id="L65">        this.emitter = emitter;</span>
+<span class="nc" id="L66">        this.resolver = resolver;</span>
+<span class="nc" id="L67">        this.explicitStart = opts.isExplicitStart();</span>
+<span class="nc" id="L68">        this.explicitEnd = opts.isExplicitEnd();</span>
+<span class="nc bnc" id="L69" title="All 2 branches missed.">        if (opts.getVersion() != null) {</span>
+<span class="nc" id="L70">            this.useVersion = opts.getVersion();</span>
+        }
+<span class="nc" id="L72">        this.useTags = opts.getTags();</span>
+<span class="nc" id="L73">        this.serializedNodes = new HashSet&lt;Node&gt;();</span>
+<span class="nc" id="L74">        this.anchors = new HashMap&lt;Node, String&gt;();</span>
+<span class="nc" id="L75">        this.anchorGenerator = opts.getAnchorGenerator();</span>
+<span class="nc" id="L76">        this.closed = null;</span>
+<span class="nc" id="L77">        this.explicitRoot = rootTag;</span>
+<span class="nc" id="L78">    }</span>
+
+    public void open() throws IOException {
+<span class="nc bnc" id="L81" title="All 2 branches missed.">        if (closed == null) {</span>
+<span class="nc" id="L82">            this.emitter.emit(new StreamStartEvent(null, null));</span>
+<span class="nc" id="L83">            this.closed = Boolean.FALSE;</span>
+<span class="nc bnc" id="L84" title="All 2 branches missed.">        } else if (Boolean.TRUE.equals(closed)) {</span>
+<span class="nc" id="L85">            throw new SerializerException(&quot;serializer is closed&quot;);</span>
+        } else {
+<span class="nc" id="L87">            throw new SerializerException(&quot;serializer is already opened&quot;);</span>
+        }
+<span class="nc" id="L89">    }</span>
+
+    public void close() throws IOException {
+<span class="nc bnc" id="L92" title="All 2 branches missed.">        if (closed == null) {</span>
+<span class="nc" id="L93">            throw new SerializerException(&quot;serializer is not opened&quot;);</span>
+<span class="nc bnc" id="L94" title="All 2 branches missed.">        } else if (!Boolean.TRUE.equals(closed)) {</span>
+<span class="nc" id="L95">            this.emitter.emit(new StreamEndEvent(null, null));</span>
+<span class="nc" id="L96">            this.closed = Boolean.TRUE;</span>
+            // release unused resources
+<span class="nc" id="L98">            this.serializedNodes.clear();</span>
+<span class="nc" id="L99">            this.anchors.clear();</span>
+        }
+<span class="nc" id="L101">    }</span>
+
+    public void serialize(Node node) throws IOException {
+<span class="nc bnc" id="L104" title="All 2 branches missed.">        if (closed == null) {</span>
+<span class="nc" id="L105">            throw new SerializerException(&quot;serializer is not opened&quot;);</span>
+<span class="nc bnc" id="L106" title="All 2 branches missed.">        } else if (closed) {</span>
+<span class="nc" id="L107">            throw new SerializerException(&quot;serializer is closed&quot;);</span>
+        }
+<span class="nc" id="L109">        this.emitter.emit(new DocumentStartEvent(null, null, this.explicitStart, this.useVersion,</span>
+<span class="nc" id="L110">                useTags));</span>
+<span class="nc" id="L111">        anchorNode(node);</span>
+<span class="nc bnc" id="L112" title="All 2 branches missed.">        if (explicitRoot != null) {</span>
+<span class="nc" id="L113">            node.setTag(explicitRoot);</span>
+        }
+<span class="nc" id="L115">        serializeNode(node, null);</span>
+<span class="nc" id="L116">        this.emitter.emit(new DocumentEndEvent(null, null, this.explicitEnd));</span>
+<span class="nc" id="L117">        this.serializedNodes.clear();</span>
+<span class="nc" id="L118">        this.anchors.clear();</span>
+<span class="nc" id="L119">    }</span>
+
+    private void anchorNode(Node node) {
+<span class="nc bnc" id="L122" title="All 2 branches missed.">        if (node.getNodeId() == NodeId.anchor) {</span>
+<span class="nc" id="L123">            node = ((AnchorNode) node).getRealNode();</span>
+        }
+<span class="nc bnc" id="L125" title="All 2 branches missed.">        if (this.anchors.containsKey(node)) {</span>
+<span class="nc" id="L126">            String anchor = this.anchors.get(node);</span>
+<span class="nc bnc" id="L127" title="All 2 branches missed.">            if (null == anchor) {</span>
+<span class="nc" id="L128">                anchor = this.anchorGenerator.nextAnchor(node);</span>
+<span class="nc" id="L129">                this.anchors.put(node, anchor);</span>
+            }
+<span class="nc" id="L131">        } else {</span>
+<span class="nc bnc" id="L132" title="All 2 branches missed.">            this.anchors.put(node, node.getAnchor() != null ? this.anchorGenerator.nextAnchor(node) : null);</span>
+<span class="nc bnc" id="L133" title="All 3 branches missed.">            switch (node.getNodeId()) {</span>
+            case sequence:
+<span class="nc" id="L135">                SequenceNode seqNode = (SequenceNode) node;</span>
+<span class="nc" id="L136">                List&lt;Node&gt; list = seqNode.getValue();</span>
+<span class="nc bnc" id="L137" title="All 2 branches missed.">                for (Node item : list) {</span>
+<span class="nc" id="L138">                    anchorNode(item);</span>
+                }
+<span class="nc" id="L140">                break;</span>
+            case mapping:
+<span class="nc" id="L142">                MappingNode mnode = (MappingNode) node;</span>
+<span class="nc" id="L143">                List&lt;NodeTuple&gt; map = mnode.getValue();</span>
+<span class="nc bnc" id="L144" title="All 2 branches missed.">                for (NodeTuple object : map) {</span>
+<span class="nc" id="L145">                    Node key = object.getKeyNode();</span>
+<span class="nc" id="L146">                    Node value = object.getValueNode();</span>
+<span class="nc" id="L147">                    anchorNode(key);</span>
+<span class="nc" id="L148">                    anchorNode(value);</span>
+                }
+                break;
+            }
+        }
+<span class="nc" id="L153">    }</span>
+
+    // parent Node is not used but might be used in the future
+    private void serializeNode(Node node, Node parent) throws IOException {
+<span class="nc bnc" id="L157" title="All 2 branches missed.">        if (node.getNodeId() == NodeId.anchor) {</span>
+<span class="nc" id="L158">            node = ((AnchorNode) node).getRealNode();</span>
+        }
+<span class="nc" id="L160">        String tAlias = this.anchors.get(node);</span>
+<span class="nc bnc" id="L161" title="All 2 branches missed.">        if (this.serializedNodes.contains(node)) {</span>
+<span class="nc" id="L162">            this.emitter.emit(new AliasEvent(tAlias, null, null));</span>
+<span class="nc" id="L163">        } else {</span>
+<span class="nc" id="L164">            this.serializedNodes.add(node);</span>
+<span class="nc bnc" id="L165" title="All 3 branches missed.">            switch (node.getNodeId()) {</span>
+            case scalar:
+<span class="nc" id="L167">                ScalarNode scalarNode = (ScalarNode) node;</span>
+<span class="nc" id="L168">                serializeComments(node.getBlockComments());</span>
+<span class="nc" id="L169">                Tag detectedTag = this.resolver.resolve(NodeId.scalar, scalarNode.getValue(), true);</span>
+<span class="nc" id="L170">                Tag defaultTag = this.resolver.resolve(NodeId.scalar, scalarNode.getValue(), false);</span>
+<span class="nc" id="L171">                ImplicitTuple tuple = new ImplicitTuple(node.getTag().equals(detectedTag), node</span>
+<span class="nc" id="L172">                        .getTag().equals(defaultTag));</span>
+<span class="nc" id="L173">                ScalarEvent event = new ScalarEvent(tAlias, node.getTag().getValue(), tuple,</span>
+<span class="nc" id="L174">                        scalarNode.getValue(), null, null, scalarNode.getScalarStyle());</span>
+<span class="nc" id="L175">                this.emitter.emit(event);</span>
+<span class="nc" id="L176">                serializeComments(node.getInLineComments());</span>
+<span class="nc" id="L177">                serializeComments(node.getEndComments());</span>
+<span class="nc" id="L178">                break;</span>
+            case sequence:
+<span class="nc" id="L180">                SequenceNode seqNode = (SequenceNode) node;</span>
+<span class="nc" id="L181">                serializeComments(node.getBlockComments());</span>
+<span class="nc" id="L182">                boolean implicitS = node.getTag().equals(this.resolver.resolve(NodeId.sequence,</span>
+<span class="nc" id="L183">                        null, true));</span>
+<span class="nc" id="L184">                this.emitter.emit(new SequenceStartEvent(tAlias, node.getTag().getValue(),</span>
+<span class="nc" id="L185">                        implicitS, null, null, seqNode.getFlowStyle()));</span>
+<span class="nc" id="L186">                List&lt;Node&gt; list = seqNode.getValue();</span>
+<span class="nc bnc" id="L187" title="All 2 branches missed.">                for (Node item : list) {</span>
+<span class="nc" id="L188">                    serializeNode(item, node);</span>
+                }
+<span class="nc" id="L190">                this.emitter.emit(new SequenceEndEvent(null, null));</span>
+<span class="nc" id="L191">                serializeComments(node.getInLineComments());</span>
+<span class="nc" id="L192">                serializeComments(node.getEndComments());</span>
+<span class="nc" id="L193">                break;</span>
+            default:// instance of MappingNode
+<span class="nc" id="L195">                serializeComments(node.getBlockComments());</span>
+<span class="nc" id="L196">                Tag implicitTag = this.resolver.resolve(NodeId.mapping, null, true);</span>
+<span class="nc" id="L197">                boolean implicitM = node.getTag().equals(implicitTag);</span>
+<span class="nc" id="L198">                MappingNode mnode = (MappingNode) node;</span>
+<span class="nc" id="L199">                List&lt;NodeTuple&gt; map = mnode.getValue();</span>
+<span class="nc bnc" id="L200" title="All 2 branches missed.">                if (mnode.getTag() != Tag.COMMENT ) {</span>
+<span class="nc" id="L201">                    this.emitter.emit(new MappingStartEvent(tAlias, mnode.getTag().getValue(), implicitM, null, null,</span>
+<span class="nc" id="L202">                            mnode.getFlowStyle()));</span>
+<span class="nc bnc" id="L203" title="All 2 branches missed.">                    for (NodeTuple row : map) {</span>
+<span class="nc" id="L204">                        Node key = row.getKeyNode();</span>
+<span class="nc" id="L205">                        Node value = row.getValueNode();</span>
+<span class="nc" id="L206">                        serializeNode(key, mnode);</span>
+<span class="nc" id="L207">                        serializeNode(value, mnode);</span>
+                    }
+<span class="nc" id="L209">                    this.emitter.emit(new MappingEndEvent(null, null));</span>
+<span class="nc" id="L210">                    serializeComments(node.getInLineComments());</span>
+<span class="nc" id="L211">                    serializeComments(node.getEndComments());</span>
+                }
+            }
+        }
+<span class="nc" id="L215">    }</span>
+
+    private void serializeComments(List&lt;CommentLine&gt; comments) throws IOException {
+<span class="nc bnc" id="L218" title="All 2 branches missed.">        if(comments == null) {</span>
+<span class="nc" id="L219">            return;</span>
+        }
+<span class="nc bnc" id="L221" title="All 2 branches missed.">        for (CommentLine line : comments) {</span>
+<span class="nc" id="L222">            CommentEvent commentEvent = new CommentEvent(line.getCommentType(), line.getValue(), line.getStartMark(),</span>
+<span class="nc" id="L223">                    line.getEndMark());</span>
+<span class="nc" id="L224">            this.emitter.emit(commentEvent);</span>
+        }
+<span class="nc" id="L226">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

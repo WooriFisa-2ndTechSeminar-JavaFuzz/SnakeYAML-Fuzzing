@@ -1,0 +1,317 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Composer.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.composer</a> &gt; <span class="el_source">Composer.java</span></div><h1>Composer.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.composer;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.yaml.snakeyaml.DumperOptions.FlowStyle;
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.comments.CommentEventsCollector;
+import org.yaml.snakeyaml.comments.CommentLine;
+import org.yaml.snakeyaml.comments.CommentType;
+import org.yaml.snakeyaml.error.Mark;
+import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.events.AliasEvent;
+import org.yaml.snakeyaml.events.Event;
+import org.yaml.snakeyaml.events.MappingStartEvent;
+import org.yaml.snakeyaml.events.NodeEvent;
+import org.yaml.snakeyaml.events.ScalarEvent;
+import org.yaml.snakeyaml.events.SequenceStartEvent;
+import org.yaml.snakeyaml.nodes.MappingNode;
+import org.yaml.snakeyaml.nodes.Node;
+import org.yaml.snakeyaml.nodes.NodeId;
+import org.yaml.snakeyaml.nodes.NodeTuple;
+import org.yaml.snakeyaml.nodes.ScalarNode;
+import org.yaml.snakeyaml.nodes.SequenceNode;
+import org.yaml.snakeyaml.nodes.Tag;
+import org.yaml.snakeyaml.parser.Parser;
+import org.yaml.snakeyaml.resolver.Resolver;
+
+/**
+ * Creates a node graph from parser events.
+ * &lt;p&gt;
+ * Corresponds to the 'Compose' step as described in chapter 3.1 of the
+ * &lt;a href=&quot;http://yaml.org/spec/1.1/&quot;&gt;YAML Specification&lt;/a&gt;.
+ * &lt;/p&gt;
+ */
+public class Composer {
+    protected final Parser parser;
+    private final Resolver resolver;
+    private final Map&lt;String, Node&gt; anchors;
+    private final Set&lt;Node&gt; recursiveNodes;
+<span class="fc" id="L61">    private int nonScalarAliasesCount = 0;</span>
+    private final LoaderOptions loadingConfig;
+    private final CommentEventsCollector blockCommentsCollector;
+    private final CommentEventsCollector inlineCommentsCollector;
+
+    public Composer(Parser parser, Resolver resolver) {
+<span class="nc" id="L67">        this(parser, resolver, new LoaderOptions());</span>
+<span class="nc" id="L68">    }</span>
+
+<span class="fc" id="L70">    public Composer(Parser parser, Resolver resolver, LoaderOptions loadingConfig) {</span>
+<span class="fc" id="L71">        this.parser = parser;</span>
+<span class="fc" id="L72">        this.resolver = resolver;</span>
+<span class="fc" id="L73">        this.anchors = new HashMap&lt;String, Node&gt;();</span>
+<span class="fc" id="L74">        this.recursiveNodes = new HashSet&lt;Node&gt;();</span>
+<span class="fc" id="L75">        this.loadingConfig = loadingConfig;</span>
+<span class="fc" id="L76">        this.blockCommentsCollector = new CommentEventsCollector(parser,</span>
+<span class="fc" id="L77">                CommentType.BLANK_LINE, CommentType.BLOCK);</span>
+<span class="fc" id="L78">        this.inlineCommentsCollector = new CommentEventsCollector(parser,</span>
+<span class="fc" id="L79">                CommentType.IN_LINE);</span>
+<span class="fc" id="L80">    }</span>
+
+    /**
+     * Checks if further documents are available.
+     *
+     * @return &lt;code&gt;true&lt;/code&gt; if there is at least one more document.
+     */
+    public boolean checkNode() {
+        // Drop the STREAM-START event.
+<span class="nc bnc" id="L89" title="All 2 branches missed.">        if (parser.checkEvent(Event.ID.StreamStart)) {</span>
+<span class="nc" id="L90">            parser.getEvent();</span>
+        }
+        // If there are more documents available?
+<span class="nc bnc" id="L93" title="All 2 branches missed.">        return !parser.checkEvent(Event.ID.StreamEnd);</span>
+    }
+
+    /**
+     * Reads and composes the next document.
+     *
+     * @return The root node of the document or &lt;code&gt;null&lt;/code&gt; if no more documents are available.
+     */
+    public Node getNode() {
+        // Collect inter-document start comments
+<span class="fc" id="L103">        blockCommentsCollector.collectEvents();</span>
+<span class="pc bpc" id="L104" title="1 of 2 branches missed.">        if (parser.checkEvent(Event.ID.StreamEnd)) {</span>
+<span class="nc" id="L105">            List&lt;CommentLine&gt; commentLines = blockCommentsCollector.consume();</span>
+<span class="nc" id="L106">            Mark startMark = commentLines.get(0).getStartMark();</span>
+<span class="nc" id="L107">            List&lt;NodeTuple&gt; children = Collections.emptyList();</span>
+<span class="nc" id="L108">            Node node = new MappingNode(Tag.COMMENT, false, children, startMark, null, FlowStyle.BLOCK);</span>
+<span class="nc" id="L109">            node.setBlockComments(commentLines);</span>
+<span class="nc" id="L110">            return node;</span>
+        }
+        // Drop the DOCUMENT-START event.
+<span class="fc" id="L113">        parser.getEvent();</span>
+        // Compose the root node.
+<span class="fc" id="L115">        Node node = composeNode(null);</span>
+        // Drop the DOCUMENT-END event.
+<span class="fc" id="L117">        blockCommentsCollector.collectEvents();</span>
+<span class="pc bpc" id="L118" title="1 of 2 branches missed.">        if(!blockCommentsCollector.isEmpty()) {</span>
+<span class="nc" id="L119">            node.setEndComments(blockCommentsCollector.consume());</span>
+        }
+<span class="fc" id="L121">        parser.getEvent();</span>
+<span class="fc" id="L122">        this.anchors.clear();</span>
+<span class="fc" id="L123">        this.recursiveNodes.clear();</span>
+<span class="fc" id="L124">        return node;</span>
+    }
+
+    /**
+     * Reads a document from a source that contains only one document.
+     * &lt;p&gt;
+     * If the stream contains more than one document an exception is thrown.
+     * &lt;/p&gt;
+     *
+     * @return The root node of the document or &lt;code&gt;null&lt;/code&gt; if no document
+     * is available.
+     */
+    public Node getSingleNode() {
+        // Drop the STREAM-START event.
+<span class="fc" id="L138">        parser.getEvent();</span>
+        // Compose a document if the stream is not empty.
+<span class="fc" id="L140">        Node document = null;</span>
+<span class="fc bfc" id="L141" title="All 2 branches covered.">        if (!parser.checkEvent(Event.ID.StreamEnd)) {</span>
+<span class="fc" id="L142">            document = getNode();</span>
+        }
+        // Ensure that the stream contains no more documents.
+<span class="fc bfc" id="L145" title="All 2 branches covered.">        if (!parser.checkEvent(Event.ID.StreamEnd)) {</span>
+<span class="fc" id="L146">            Event event = parser.getEvent();</span>
+<span class="pc bpc" id="L147" title="1 of 2 branches missed.">            Mark contextMark = document != null ? document.getStartMark(): null;</span>
+<span class="fc" id="L148">            throw new ComposerException(&quot;expected a single document in the stream&quot;,</span>
+<span class="fc" id="L149">                    contextMark, &quot;but found another document&quot;, event.getStartMark());</span>
+        }
+        // Drop the STREAM-END event.
+<span class="fc" id="L152">        parser.getEvent();</span>
+<span class="fc" id="L153">        return document;</span>
+    }
+
+    private Node composeNode(Node parent) {
+<span class="fc" id="L157">        blockCommentsCollector.collectEvents();</span>
+<span class="fc bfc" id="L158" title="All 2 branches covered.">        if (parent != null)</span>
+<span class="fc" id="L159">            recursiveNodes.add(parent);</span>
+        final Node node;
+<span class="fc bfc" id="L161" title="All 2 branches covered.">        if (parser.checkEvent(Event.ID.Alias)) {</span>
+<span class="fc" id="L162">            AliasEvent event = (AliasEvent) parser.getEvent();</span>
+<span class="fc" id="L163">            String anchor = event.getAnchor();</span>
+<span class="fc bfc" id="L164" title="All 2 branches covered.">            if (!anchors.containsKey(anchor)) {</span>
+<span class="fc" id="L165">                throw new ComposerException(null, null, &quot;found undefined alias &quot; + anchor,</span>
+<span class="fc" id="L166">                        event.getStartMark());</span>
+            }
+<span class="fc" id="L168">            node = anchors.get(anchor);</span>
+<span class="fc bfc" id="L169" title="All 2 branches covered.">            if (!(node instanceof ScalarNode)) {</span>
+<span class="fc" id="L170">                this.nonScalarAliasesCount++;</span>
+<span class="fc bfc" id="L171" title="All 2 branches covered.">                if (this.nonScalarAliasesCount &gt; loadingConfig.getMaxAliasesForCollections()) {</span>
+<span class="fc" id="L172">                    throw new YAMLException(&quot;Number of aliases for non-scalar nodes exceeds the specified max=&quot; + loadingConfig.getMaxAliasesForCollections());</span>
+                }
+            }
+<span class="fc bfc" id="L175" title="All 2 branches covered.">            if (recursiveNodes.remove(node)) {</span>
+<span class="fc" id="L176">                node.setTwoStepsConstruction(true);</span>
+            }
+<span class="fc" id="L178">            node.setBlockComments(blockCommentsCollector.consume());</span>
+<span class="fc" id="L179">        } else {</span>
+<span class="fc" id="L180">            NodeEvent event = (NodeEvent) parser.peekEvent();</span>
+<span class="fc" id="L181">            String anchor = event.getAnchor();</span>
+            // the check for duplicate anchors has been removed (issue 174)
+<span class="fc bfc" id="L183" title="All 2 branches covered.">            if (parser.checkEvent(Event.ID.Scalar)) {</span>
+<span class="fc" id="L184">                node = composeScalarNode(anchor, blockCommentsCollector.consume());</span>
+<span class="fc bfc" id="L185" title="All 2 branches covered.">            } else if (parser.checkEvent(Event.ID.SequenceStart)) {</span>
+<span class="fc" id="L186">                node = composeSequenceNode(anchor);</span>
+<span class="fc" id="L187">            } else {</span>
+<span class="fc" id="L188">                node = composeMappingNode(anchor);</span>
+            }
+        }
+<span class="fc" id="L191">        recursiveNodes.remove(parent);</span>
+<span class="fc" id="L192">        return node;</span>
+    }
+
+    protected Node composeScalarNode(String anchor, List&lt;CommentLine&gt; blockComments) {
+<span class="fc" id="L196">        ScalarEvent ev = (ScalarEvent) parser.getEvent();</span>
+<span class="fc" id="L197">        String tag = ev.getTag();</span>
+<span class="fc" id="L198">        boolean resolved = false;</span>
+        Tag nodeTag;
+<span class="fc bfc" id="L200" title="All 4 branches covered.">        if (tag == null || tag.equals(&quot;!&quot;)) {</span>
+<span class="fc" id="L201">            nodeTag = resolver.resolve(NodeId.scalar, ev.getValue(),</span>
+<span class="fc" id="L202">                    ev.getImplicit().canOmitTagInPlainScalar());</span>
+<span class="fc" id="L203">            resolved = true;</span>
+<span class="fc" id="L204">        } else {</span>
+<span class="fc" id="L205">            nodeTag = new Tag(tag);</span>
+        }
+<span class="fc" id="L207">        Node node = new ScalarNode(nodeTag, resolved, ev.getValue(), ev.getStartMark(),</span>
+<span class="fc" id="L208">                ev.getEndMark(), ev.getScalarStyle());</span>
+<span class="fc bfc" id="L209" title="All 2 branches covered.">        if (anchor != null) {</span>
+<span class="fc" id="L210">            node.setAnchor(anchor);</span>
+<span class="fc" id="L211">            anchors.put(anchor, node);</span>
+        }
+<span class="fc" id="L213">        node.setBlockComments(blockComments);</span>
+<span class="fc" id="L214">        node.setInLineComments(inlineCommentsCollector.collectEvents().consume());</span>
+<span class="fc" id="L215">        return node;</span>
+    }
+
+    protected Node composeSequenceNode(String anchor) {
+<span class="fc" id="L219">        SequenceStartEvent startEvent = (SequenceStartEvent) parser.getEvent();</span>
+<span class="fc" id="L220">        String tag = startEvent.getTag();</span>
+        Tag nodeTag;
+        
+<span class="fc" id="L223">        boolean resolved = false;</span>
+<span class="fc bfc" id="L224" title="All 4 branches covered.">        if (tag == null || tag.equals(&quot;!&quot;)) {</span>
+<span class="fc" id="L225">            nodeTag = resolver.resolve(NodeId.sequence, null, startEvent.getImplicit());</span>
+<span class="fc" id="L226">            resolved = true;</span>
+<span class="fc" id="L227">        } else {</span>
+<span class="fc" id="L228">            nodeTag = new Tag(tag);</span>
+        }
+<span class="fc" id="L230">        final ArrayList&lt;Node&gt; children = new ArrayList&lt;Node&gt;();</span>
+<span class="fc" id="L231">        SequenceNode node = new SequenceNode(nodeTag, resolved, children, startEvent.getStartMark(),</span>
+<span class="fc" id="L232">                null, startEvent.getFlowStyle());</span>
+<span class="fc bfc" id="L233" title="All 2 branches covered.">        if (startEvent.isFlow()) {</span>
+<span class="fc" id="L234">            node.setBlockComments(blockCommentsCollector.consume());</span>
+        }
+<span class="fc bfc" id="L236" title="All 2 branches covered.">        if (anchor != null) {</span>
+<span class="fc" id="L237">            node.setAnchor(anchor);</span>
+<span class="fc" id="L238">            anchors.put(anchor, node);</span>
+        }
+<span class="fc bfc" id="L240" title="All 2 branches covered.">        while (!parser.checkEvent(Event.ID.SequenceEnd)) {</span>
+<span class="fc" id="L241">            blockCommentsCollector.collectEvents();</span>
+<span class="pc bpc" id="L242" title="1 of 2 branches missed.">            if (parser.checkEvent(Event.ID.SequenceEnd)) {</span>
+<span class="nc" id="L243">                break;</span>
+            }
+<span class="fc" id="L245">            children.add(composeNode(node));</span>
+        }
+<span class="fc bfc" id="L247" title="All 2 branches covered.">        if (startEvent.isFlow()) {</span>
+<span class="fc" id="L248">            node.setInLineComments(inlineCommentsCollector.collectEvents().consume());</span>
+        }
+<span class="fc" id="L250">        Event endEvent = parser.getEvent();</span>
+<span class="fc" id="L251">        node.setEndMark(endEvent.getEndMark());</span>
+<span class="fc" id="L252">        inlineCommentsCollector.collectEvents();</span>
+<span class="pc bpc" id="L253" title="1 of 2 branches missed.">        if(!inlineCommentsCollector.isEmpty()) {</span>
+<span class="nc" id="L254">            node.setInLineComments(inlineCommentsCollector.consume());</span>
+        }
+<span class="fc" id="L256">        return node;</span>
+    }
+
+    protected Node composeMappingNode(String anchor) {
+<span class="fc" id="L260">        MappingStartEvent startEvent = (MappingStartEvent) parser.getEvent();</span>
+<span class="fc" id="L261">        String tag = startEvent.getTag();</span>
+        Tag nodeTag;
+<span class="fc" id="L263">        boolean resolved = false;</span>
+<span class="fc bfc" id="L264" title="All 4 branches covered.">        if (tag == null || tag.equals(&quot;!&quot;)) {</span>
+<span class="fc" id="L265">            nodeTag = resolver.resolve(NodeId.mapping, null, startEvent.getImplicit());</span>
+<span class="fc" id="L266">            resolved = true;</span>
+<span class="fc" id="L267">        } else {</span>
+<span class="fc" id="L268">            nodeTag = new Tag(tag);</span>
+        }
+
+<span class="fc" id="L271">        final List&lt;NodeTuple&gt; children = new ArrayList&lt;NodeTuple&gt;();</span>
+<span class="fc" id="L272">        MappingNode node = new MappingNode(nodeTag, resolved, children, startEvent.getStartMark(),</span>
+<span class="fc" id="L273">                null, startEvent.getFlowStyle());</span>
+<span class="fc bfc" id="L274" title="All 2 branches covered.">        if (startEvent.isFlow()) {</span>
+<span class="fc" id="L275">            node.setBlockComments(blockCommentsCollector.consume());</span>
+        }
+<span class="fc bfc" id="L277" title="All 2 branches covered.">        if (anchor != null) {</span>
+<span class="fc" id="L278">            node.setAnchor(anchor);</span>
+<span class="fc" id="L279">            anchors.put(anchor, node);</span>
+        }
+<span class="fc bfc" id="L281" title="All 2 branches covered.">        while (!parser.checkEvent(Event.ID.MappingEnd)) {</span>
+<span class="fc" id="L282">            blockCommentsCollector.collectEvents();</span>
+<span class="pc bpc" id="L283" title="1 of 2 branches missed.">            if (parser.checkEvent(Event.ID.MappingEnd)) {</span>
+<span class="nc" id="L284">                break;</span>
+            }
+<span class="fc" id="L286">            composeMappingChildren(children, node);</span>
+        }
+<span class="fc bfc" id="L288" title="All 2 branches covered.">        if (startEvent.isFlow()) {</span>
+<span class="fc" id="L289">            node.setInLineComments(inlineCommentsCollector.collectEvents().consume());</span>
+        }
+<span class="fc" id="L291">        Event endEvent = parser.getEvent();</span>
+<span class="fc" id="L292">        node.setEndMark(endEvent.getEndMark());</span>
+<span class="fc" id="L293">        inlineCommentsCollector.collectEvents();</span>
+<span class="pc bpc" id="L294" title="1 of 2 branches missed.">        if(!inlineCommentsCollector.isEmpty()) {</span>
+<span class="nc" id="L295">            node.setInLineComments(inlineCommentsCollector.consume());</span>
+        }
+<span class="fc" id="L297">        return node;</span>
+    }
+
+    protected void composeMappingChildren(List&lt;NodeTuple&gt; children, MappingNode node) {
+<span class="fc" id="L301">        Node itemKey = composeKeyNode(node);</span>
+<span class="pc bpc" id="L302" title="1 of 2 branches missed.">        if (itemKey.getTag().equals(Tag.MERGE)) {</span>
+<span class="nc" id="L303">            node.setMerged(true);</span>
+        }
+<span class="fc" id="L305">        Node itemValue = composeValueNode(node);</span>
+<span class="fc" id="L306">        children.add(new NodeTuple(itemKey, itemValue));</span>
+<span class="fc" id="L307">    }</span>
+
+    protected Node composeKeyNode(MappingNode node) {
+<span class="fc" id="L310">        return composeNode(node);</span>
+    }
+
+    protected Node composeValueNode(MappingNode node) {
+<span class="fc" id="L314">        return composeNode(node);</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

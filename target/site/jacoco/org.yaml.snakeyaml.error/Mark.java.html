@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Mark.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.error</a> &gt; <span class="el_source">Mark.java</span></div><h1>Mark.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.error;
+
+import java.io.Serializable;
+
+import org.yaml.snakeyaml.scanner.Constant;
+
+/**
+ * It's just a record and its only use is producing nice error messages. Parser
+ * does not use it for any other purposes.
+ */
+public final class Mark implements Serializable {
+    private String name;
+    private int index;
+    private int line;
+    private int column;
+    private int[] buffer;
+    private int pointer;
+
+    private static int[] toCodePoints(char[] str) {
+<span class="nc" id="L35">        int[] codePoints = new int[Character.codePointCount(str, 0, str.length)];</span>
+<span class="nc bnc" id="L36" title="All 2 branches missed.">        for (int i = 0, c = 0; i &lt; str.length; c++) {</span>
+<span class="nc" id="L37">            int cp = Character.codePointAt(str, i);</span>
+<span class="nc" id="L38">            codePoints[c] = cp;</span>
+<span class="nc" id="L39">            i += Character.charCount(cp);</span>
+        }
+<span class="nc" id="L41">        return codePoints;</span>
+    }
+
+    public Mark(String name, int index, int line, int column, char[] str, int pointer) {
+<span class="nc" id="L45">        this(name, index, line, column, toCodePoints(str), pointer);</span>
+<span class="nc" id="L46">    }</span>
+    
+    /*
+     * Existed in older versions but replaced with {@code char[]}-based constructor.
+     * Restored in v1.22 for backwards compatibility.
+     * @deprecated Since restored in v1.22.  Use {@link Mark#Mark(String, int, int, int, char[], int)}.
+     */
+    @Deprecated
+    public Mark(String name, int index, int line, int column, String buffer, int pointer) {
+<span class="nc" id="L55">        this(name, index, line, column, buffer.toCharArray(), pointer);</span>
+<span class="nc" id="L56">    }</span>
+
+    public Mark(String name, int index, int line, int column, int[] buffer, int pointer) {
+<span class="fc" id="L59">        super();</span>
+<span class="fc" id="L60">        this.name = name;</span>
+<span class="fc" id="L61">        this.index = index;</span>
+<span class="fc" id="L62">        this.line = line;</span>
+<span class="fc" id="L63">        this.column = column;</span>
+<span class="fc" id="L64">        this.buffer = buffer;</span>
+<span class="fc" id="L65">        this.pointer = pointer;</span>
+<span class="fc" id="L66">    }</span>
+
+    private boolean isLineBreak(int c) {
+<span class="fc" id="L69">        return Constant.NULL_OR_LINEBR.has(c);</span>
+    }
+
+    public String get_snippet(int indent, int max_length) {
+<span class="fc" id="L73">        float half = max_length / 2f - 1f;</span>
+<span class="fc" id="L74">        int start = pointer;</span>
+<span class="fc" id="L75">        String head = &quot;&quot;;</span>
+<span class="fc bfc" id="L76" title="All 4 branches covered.">        while ((start &gt; 0) &amp;&amp; !isLineBreak(buffer[start - 1])) {</span>
+<span class="fc" id="L77">            start -= 1;</span>
+<span class="fc bfc" id="L78" title="All 2 branches covered.">            if (pointer - start &gt; half) {</span>
+<span class="fc" id="L79">                head = &quot; ... &quot;;</span>
+<span class="fc" id="L80">                start += 5;</span>
+<span class="fc" id="L81">                break;</span>
+            }
+        }
+<span class="fc" id="L84">        String tail = &quot;&quot;;</span>
+<span class="fc" id="L85">        int end = pointer;</span>
+<span class="fc bfc" id="L86" title="All 4 branches covered.">        while ((end &lt; buffer.length) &amp;&amp; !isLineBreak(buffer[end])) {</span>
+<span class="fc" id="L87">            end += 1;</span>
+<span class="fc bfc" id="L88" title="All 2 branches covered.">            if (end - pointer &gt; half) {</span>
+<span class="fc" id="L89">                tail = &quot; ... &quot;;</span>
+<span class="fc" id="L90">                end -= 5;</span>
+<span class="fc" id="L91">                break;</span>
+            }
+        }
+
+<span class="fc" id="L95">        StringBuilder result = new StringBuilder();</span>
+<span class="fc bfc" id="L96" title="All 2 branches covered.">        for (int i = 0; i &lt; indent; i++) {</span>
+<span class="fc" id="L97">            result.append(&quot; &quot;);</span>
+        }
+<span class="fc" id="L99">        result.append(head);</span>
+<span class="fc bfc" id="L100" title="All 2 branches covered.">        for (int i = start; i &lt; end; i++) {</span>
+<span class="fc" id="L101">            result.appendCodePoint(buffer[i]);</span>
+        }
+<span class="fc" id="L103">        result.append(tail);</span>
+<span class="fc" id="L104">        result.append(&quot;\n&quot;);</span>
+<span class="fc bfc" id="L105" title="All 2 branches covered.">        for (int i = 0; i &lt; indent + pointer - start + head.length(); i++) {</span>
+<span class="fc" id="L106">            result.append(&quot; &quot;);</span>
+        }
+<span class="fc" id="L108">        result.append(&quot;^&quot;);</span>
+<span class="fc" id="L109">        return result.toString();</span>
+    }
+
+    public String get_snippet() {
+<span class="fc" id="L113">        return get_snippet(4, 75);</span>
+    }
+
+    @Override
+    public String toString() {
+<span class="fc" id="L118">        String snippet = get_snippet();</span>
+<span class="fc" id="L119">        StringBuilder builder = new StringBuilder(&quot; in &quot;);</span>
+<span class="fc" id="L120">        builder.append(name);</span>
+<span class="fc" id="L121">        builder.append(&quot;, line &quot;);</span>
+<span class="fc" id="L122">        builder.append(line + 1);</span>
+<span class="fc" id="L123">        builder.append(&quot;, column &quot;);</span>
+<span class="fc" id="L124">        builder.append(column + 1);</span>
+<span class="fc" id="L125">        builder.append(&quot;:\n&quot;);</span>
+<span class="fc" id="L126">        builder.append(snippet);</span>
+<span class="fc" id="L127">        return builder.toString();</span>
+    }
+
+    public String getName() {
+<span class="nc" id="L131">        return name;</span>
+    }
+
+    /**
+     * starts with 0
+     * @return line number
+     */
+    public int getLine() {
+<span class="nc" id="L139">        return line;</span>
+    }
+
+    /**
+     * starts with 0
+     * @return column number
+     */
+    public int getColumn() {
+<span class="nc" id="L147">        return column;</span>
+    }
+
+    /**
+     * starts with 0
+     * @return character number
+     */
+    public int getIndex() {
+<span class="nc" id="L155">        return index;</span>
+    }
+
+    public int[] getBuffer() {
+<span class="nc" id="L159">        return buffer;</span>
+    }
+
+    public int getPointer() {
+<span class="nc" id="L163">        return pointer;</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>

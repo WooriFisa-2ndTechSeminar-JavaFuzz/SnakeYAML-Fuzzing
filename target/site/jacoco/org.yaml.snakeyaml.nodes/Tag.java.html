@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="ko"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>Tag.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">SnakeYAML-Fuzzing</a> &gt; <a href="index.source.html" class="el_package">org.yaml.snakeyaml.nodes</a> &gt; <span class="el_source">Tag.java</span></div><h1>Tag.java</h1><pre class="source lang-java linenums">/**
+ * Copyright (c) 2008, SnakeYAML
+ *
+ * Licensed under the Apache License, Version 2.0 (the &quot;License&quot;);
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an &quot;AS IS&quot; BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.yaml.snakeyaml.nodes;
+
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.net.URI;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+
+import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.util.UriEncoder;
+
+public final class Tag {
+    public static final String PREFIX = &quot;tag:yaml.org,2002:&quot;;
+<span class="fc" id="L32">    public static final Tag YAML = new Tag(PREFIX + &quot;yaml&quot;);</span>
+<span class="fc" id="L33">    public static final Tag MERGE = new Tag(PREFIX + &quot;merge&quot;);</span>
+<span class="fc" id="L34">    public static final Tag SET = new Tag(PREFIX + &quot;set&quot;);</span>
+<span class="fc" id="L35">    public static final Tag PAIRS = new Tag(PREFIX + &quot;pairs&quot;);</span>
+<span class="fc" id="L36">    public static final Tag OMAP = new Tag(PREFIX + &quot;omap&quot;);</span>
+<span class="fc" id="L37">    public static final Tag BINARY = new Tag(PREFIX + &quot;binary&quot;);</span>
+<span class="fc" id="L38">    public static final Tag INT = new Tag(PREFIX + &quot;int&quot;);</span>
+<span class="fc" id="L39">    public static final Tag FLOAT = new Tag(PREFIX + &quot;float&quot;);</span>
+<span class="fc" id="L40">    public static final Tag TIMESTAMP = new Tag(PREFIX + &quot;timestamp&quot;);</span>
+<span class="fc" id="L41">    public static final Tag BOOL = new Tag(PREFIX + &quot;bool&quot;);</span>
+<span class="fc" id="L42">    public static final Tag NULL = new Tag(PREFIX + &quot;null&quot;);</span>
+<span class="fc" id="L43">    public static final Tag STR = new Tag(PREFIX + &quot;str&quot;);</span>
+<span class="fc" id="L44">    public static final Tag SEQ = new Tag(PREFIX + &quot;seq&quot;);</span>
+<span class="fc" id="L45">    public static final Tag MAP = new Tag(PREFIX + &quot;map&quot;);</span>
+    // For use to indicate a DUMMY node that contains comments, when there is no other (empty document)
+<span class="fc" id="L47">    public static final Tag COMMENT = new Tag(PREFIX + &quot;comment&quot;);</span>
+    protected static final Map&lt;Tag, Set&lt;Class&lt;?&gt;&gt;&gt; COMPATIBILITY_MAP;
+    static {
+<span class="fc" id="L50">        COMPATIBILITY_MAP = new HashMap&lt;Tag, Set&lt;Class&lt;?&gt;&gt;&gt;();</span>
+<span class="fc" id="L51">        Set&lt;Class&lt;?&gt;&gt; floatSet = new HashSet&lt;Class&lt;?&gt;&gt;();</span>
+<span class="fc" id="L52">        floatSet.add(Double.class);</span>
+<span class="fc" id="L53">        floatSet.add(Float.class);</span>
+<span class="fc" id="L54">        floatSet.add(BigDecimal.class);</span>
+<span class="fc" id="L55">        COMPATIBILITY_MAP.put(FLOAT, floatSet);</span>
+        //
+<span class="fc" id="L57">        Set&lt;Class&lt;?&gt;&gt; intSet = new HashSet&lt;Class&lt;?&gt;&gt;();</span>
+<span class="fc" id="L58">        intSet.add(Integer.class);</span>
+<span class="fc" id="L59">        intSet.add(Long.class);</span>
+<span class="fc" id="L60">        intSet.add(BigInteger.class);</span>
+<span class="fc" id="L61">        COMPATIBILITY_MAP.put(INT, intSet);</span>
+        //
+<span class="fc" id="L63">        Set&lt;Class&lt;?&gt;&gt; timestampSet = new HashSet&lt;Class&lt;?&gt;&gt;();</span>
+<span class="fc" id="L64">        timestampSet.add(Date.class);</span>
+
+        // java.sql is a separate module since jigsaw was introduced in java9
+        try {
+<span class="fc" id="L68">            timestampSet.add(Class.forName(&quot;java.sql.Date&quot;));</span>
+<span class="fc" id="L69">            timestampSet.add(Class.forName(&quot;java.sql.Timestamp&quot;));</span>
+<span class="pc" id="L70">        } catch (ClassNotFoundException ignored) {</span>
+            // ignore - we are running in a module path without java.sql
+        }
+
+<span class="fc" id="L74">        COMPATIBILITY_MAP.put(TIMESTAMP, timestampSet);</span>
+<span class="fc" id="L75">    }</span>
+
+    private final String value;
+<span class="pc" id="L78">    private boolean secondary = false; // see http://www.yaml.org/refcard.html</span>
+
+<span class="fc" id="L80">    public Tag(String tag) {</span>
+<span class="pc bpc" id="L81" title="1 of 2 branches missed.">        if (tag == null) {</span>
+<span class="nc" id="L82">            throw new NullPointerException(&quot;Tag must be provided.&quot;);</span>
+<span class="pc bpc" id="L83" title="1 of 2 branches missed.">        } else if (tag.length() == 0) {</span>
+<span class="nc" id="L84">            throw new IllegalArgumentException(&quot;Tag must not be empty.&quot;);</span>
+<span class="fc bfc" id="L85" title="All 2 branches covered.">        } else if (tag.trim().length() != tag.length()) {</span>
+<span class="fc" id="L86">            throw new IllegalArgumentException(&quot;Tag must not contain leading or trailing spaces.&quot;);</span>
+        }
+<span class="fc" id="L88">        this.value = UriEncoder.encode(tag);</span>
+<span class="fc bfc" id="L89" title="All 2 branches covered.">        this.secondary = !tag.startsWith(PREFIX);</span>
+<span class="fc" id="L90">    }</span>
+
+<span class="nc" id="L92">    public Tag(Class&lt;? extends Object&gt; clazz) {</span>
+<span class="nc bnc" id="L93" title="All 2 branches missed.">        if (clazz == null) {</span>
+<span class="nc" id="L94">            throw new NullPointerException(&quot;Class for tag must be provided.&quot;);</span>
+        }
+<span class="nc" id="L96">        this.value = Tag.PREFIX + UriEncoder.encode(clazz.getName());</span>
+<span class="nc" id="L97">    }</span>
+
+    /**
+     * @deprecated - it will be removed
+     * @param uri
+     *            - URI to be encoded as tag value
+     */
+<span class="nc" id="L104">    public Tag(URI uri) {</span>
+<span class="nc bnc" id="L105" title="All 2 branches missed.">        if (uri == null) {</span>
+<span class="nc" id="L106">            throw new NullPointerException(&quot;URI for tag must be provided.&quot;);</span>
+        }
+<span class="nc" id="L108">        this.value = uri.toASCIIString();</span>
+<span class="nc" id="L109">    }</span>
+
+    public boolean isSecondary() {
+<span class="fc" id="L112">        return secondary;</span>
+    }
+
+    public String getValue() {
+<span class="fc" id="L116">        return value;</span>
+    }
+
+    public boolean startsWith(String prefix) {
+<span class="nc" id="L120">        return value.startsWith(prefix);</span>
+    }
+
+    public String getClassName() {
+<span class="fc bfc" id="L124" title="All 2 branches covered.">        if (!value.startsWith(Tag.PREFIX)) {</span>
+<span class="fc" id="L125">            throw new YAMLException(&quot;Invalid tag: &quot; + value);</span>
+        }
+<span class="fc" id="L127">        return UriEncoder.decode(value.substring(Tag.PREFIX.length()));</span>
+    }
+
+    @Override
+    public String toString() {
+<span class="fc" id="L132">        return value;</span>
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+<span class="pc bpc" id="L137" title="1 of 2 branches missed.">        if (obj instanceof Tag) {</span>
+<span class="fc" id="L138">            return value.equals(((Tag) obj).getValue());</span>
+        } else
+<span class="nc" id="L140">            return false;</span>
+    }
+
+    @Override
+    public int hashCode() {
+<span class="fc" id="L145">        return value.hashCode();</span>
+    }
+
+    /**
+     * Java has more then 1 class compatible with a language-independent tag (!!int, !!float, !!timestamp etc)
+     *
+     * @param clazz
+     *            - Class to check compatibility
+     * @return true when the Class can be represented by this language-independent tag
+     */
+    public boolean isCompatible(Class&lt;?&gt; clazz) {
+<span class="fc" id="L156">        Set&lt;Class&lt;?&gt;&gt; set = COMPATIBILITY_MAP.get(this);</span>
+<span class="fc bfc" id="L157" title="All 2 branches covered.">        if (set != null) {</span>
+<span class="fc" id="L158">            return set.contains(clazz);</span>
+        } else {
+<span class="fc" id="L160">            return false;</span>
+        }
+    }
+
+    /**
+     * Check whether this tag matches the global tag for the Class
+     * 
+     * @param clazz
+     *            - Class to check
+     * @return true when the this tag can be used as a global tag for the Class
+     */
+    public boolean matches(Class&lt;? extends Object&gt; clazz) {
+<span class="nc" id="L172">        return value.equals(Tag.PREFIX + clazz.getName());</span>
+    }
+
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.12.202403310830</span></div></body></html>
