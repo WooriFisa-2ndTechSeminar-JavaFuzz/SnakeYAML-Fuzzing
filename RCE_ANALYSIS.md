@@ -1,4 +1,4 @@
-# SnakeYAML 보안 취약점 분석: v1.30 vs v2.6
+# SnakeYAML RCE 보안 취약점 분석: v1.30 vs v2.6
 
 ## 개요
 
