@@ -57,8 +57,10 @@
                 <configuration>
 					<!-- 테스트 과정에서 실패가 발생해도 무시하도 계속 진행 -->
                     <testFailureIgnore>true</testFailureIgnore>
+					<!-- 아래 환경변수는 pom.xml이 아니라 명령어의 인자로 전달하는 것이 표준적인 방식이지만, 혹시 몰라서 적어둠 -->
                     <environmentVariables>
 						<!-- 1: 퍼징 모드, 디폴트: 회귀테스트 모드 -->
+						<!-- 아래 환경변수는 회귀 테스트시에는 지워야 함 -->
                         <JAZZER_FUZZ>1</JAZZER_FUZZ>
 						<!-- 테스트에 한 번 실패해도 계속 진행 -->
                         <JAZZER_ARGS>--keep_going=0</JAZZER_ARGS>
