@@ -10,9 +10,90 @@
 
 ## 🛠️ 사용 기술 스택
 * **Language:** ![Java](https://img.shields.io/badge/Java-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)
-* **Testing & Analysis:** ![Jazzer](https://img.shields.io/badge/Jazzer-4B32C3?style=for-the-badge&logo=codeforces&logoColor=white)
+* **Testing & Analysis:** ![Jazzer](https://img.shields.io/badge/Jazzer-4B32C3?style=for-the-badge&logo=jazzer&logoColor=white)
 ![JaCoCo](https://img.shields.io/badge/JaCoCo-E10098?style=for-the-badge)
 * **Build Tool:** ![Maven](https://img.shields.io/badge/Maven-C71A36?style=for-the-badge&logo=apachemaven&logoColor=white)
+
+## 🏗️ 프로젝트 구조
+```plaintext
+SnakeYAML-Fuzzing/
+├──.cifuzz-corpus/  # 코퍼스
+│   └── com.example.SnakeYamlFuzzTest
+│       └── fuzzYamlParser
+│           ├── ff340d4de2dbfd317fcaf870cdc68afedd99d95f
+│           ├── ff3b22236e4689cad391cd4c5cfbf188a3116edb
+│           ├── ff7b274f933d53129e3e0684e3147c5657c7e503
+│           ├── ff80b9da550334f6cca6c8f6549450563d41b73a
+
+(생략)
+
+│
+├── clear.sh  # 코퍼스/크래시 데이터 삭제, 메이븐 클린 등 정리 스크립트
+├── fuzz_script.sh  # Jazzer 퍼징/회귀테스트 명령어 등 실행 스크립트
+├── pom.xml  # 메이븐 의존성
+├── src
+│   ├── java
+│   │   └── org
+│   │       └── yaml
+│   │           └── snakeyaml  # SnakeYAML 1.30 소스코드 원본
+
+(생략)
+
+│   └── test
+│       ├── java
+│       │   └── com
+│       │       └── example
+│       │           └── SnakeYamlFuzzTest.java  # 테스트 클래스
+│       └── resources
+│           └── com
+│               └── example
+│                   └── SnakeYamlFuzzTestInputs  # 크래시
+│                       └── fuzzYamlParser
+│                           ├── crash-1f93a417271a94447649ffaf78d00b48b6200ed1
+│                           ├── crash-4f8d2549fba84a23a11052018c5b604f2a2587ca
+└── target
+    ├── site
+    │   └── jacoco  # JaCoCo 커버리지 리포트
+    │       ├── index.html
+
+(생략)
+
+    ├── surefire-reports
+    │   └── com.example.SnakeYamlFuzzTest.txt  # 회귀 테스트 결과 에러 로그
+
+(생략)
+```
+
+- **.cifuzz-corpus/:**
+    - 퍼징 과정에서 생성된 코퍼스가 모이는 디렉토리
+- **src/java:**
+    - 퍼징 대상 프로그램 소스코드(SnakeYAML)을 두는 디렉토리
+- **src/test/java:**
+    - 테스트 하네스 소스코드(SnakeYamlFuzzTest.java)를 두는 디렉토리
+- **src/test/resources/<패키지명>/<테스트 클래스>Inputs:**
+    - 퍼징 과정에서 생성된 크래시가 모이는 디렉토리
+- **target/site/jacoco:**
+    - JaCoCo 커버리지 리포트가 만들어지는 디렉토리
+- **target/surefire-reports:**
+    - 메이븐 빌드 로그가 모이는 디렉토리
+
+## ▶️ 테스트 실행 방법
+
+```bash
+# 테스트 및 퍼징 실행(환경에 맞게 스크립트 사용)
+./fuzz_script.sh
+
+# 테스트 초기화
+./clear.sh
+```
+
+> 💡 **회귀 테스트 방법**\
+> `pom.xml`에서 사용 중인 Jazzer는 Standalone이 아니라, 메이븐 테스트(mvn test)로 Jazzer를 실행할 수 있게 하는, Junit 통합 버전이다.
+> Junit 통합 Jazzer는 `mvn test`시 `JAZZER_FUZZ=1` 환경변수를 입력하면 `그레이박스 퍼징 모드`, 환경변수 없이 실행하면 `회귀 테스트 모드`로 동작한다.
+> 현재 `pom.xml`은 `JAZZER_FUZZ=1` 환경변수를 기본 주입하고 있다. 따라서 회귀 테스트를 하고 싶다면 먼저 `pom.xml`에서 이 환경변수를 지워야 한다.
+> `pom.xml`과 `fuzz_script.sh`의 주석을 참고할 것
+
+생성된 커버리지 리포트는 `target/site/jacoco/index.html`에서 확인할 수 있다.
 
 ## 🚨 SnakeYAML 1.30 취약점 개요
 SnakeYAML 1.30 버전에서는 신뢰할 수 없는 사용자의 입력값을 파싱할 때 치명적인 보안 문제가 발생한다. 본 프로젝트에서는 CVE에 정식 보고된 다음 두 가지 주요 취약점을 다룬다.
@@ -274,20 +355,9 @@ decreaseNestingDepth();
 	// 변경된 LoaderOptions를 Constructor에 주입
 	Yaml yaml = new Yaml(new Constructor(options));
     ```
-## ▶️ 테스트 실행 방법
-
-```bash
-# 테스트 및 퍼징 실행(환경에 맞게 스크립트 사용)
-./fuzz_script.sh
-
-# 테스트 초기화
-./clear.sh
-```
-
-생성된 커버리지 리포트는 `target/site/jacoco/index.html`에서 확인할 수 있다.
 
 ## 📚 참고 문서
-* [CVE-2022-1471](https://nvd.nist.gov/vuln/detail/CVE-2022-1471)
-* [CVE-2022-38749](https://nvd.nist.gov/vuln/detail/CVE-2022-38749)
-* [CVE-2022-38750](https://nvd.nist.gov/vuln/detail/CVE-2022-38750)
-* [CVE-2022-38751](https://nvd.nist.gov/vuln/detail/CVE-2022-38751)
+* [CVE-2022-1471](https://www.cve.org/CVERecord?id=CVE-2022-1471)
+* [CVE-2022-38749](https://www.cve.org/CVERecord?id=CVE-2022-38749)
+* [CVE-2022-38750](https://www.cve.org/CVERecord?id=CVE-2022-38750)
+* [CVE-2022-38751](https://www.cve.org/CVERecord?id=CVE-2022-38751)
