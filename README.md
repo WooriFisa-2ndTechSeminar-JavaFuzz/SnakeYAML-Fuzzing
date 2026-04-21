@@ -99,7 +99,7 @@ SnakeYAML-Fuzzing/
 <img width="1657" height="837" alt="jacoco-ex" src="https://github.com/user-attachments/assets/31912922-f44b-4ade-9bed-97a67a12fcd9" />
 
 ### 테스트 실행 모습
-
+https://github.com/user-attachments/assets/2a579d5f-b46c-4f15-80dd-ca502ef34c9d
 
 ## 🚨 SnakeYAML 1.30 취약점 개요
 SnakeYAML 1.30 버전에서는 신뢰할 수 없는 사용자의 입력값을 파싱할 때 치명적인 보안 문제가 발생한다. 본 프로젝트에서는 CVE에 정식 보고된 다음 두 가지 주요 취약점을 다룬다.
