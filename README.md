@@ -95,6 +95,12 @@ SnakeYAML-Fuzzing/
 
 생성된 커버리지 리포트는 `target/site/jacoco/index.html`에서 확인할 수 있다.
 
+### 생성된 JaCoCo 커버리지 리포트
+<img width="1657" height="837" alt="jacoco-ex" src="https://github.com/user-attachments/assets/31912922-f44b-4ade-9bed-97a67a12fcd9" />
+
+### 테스트 실행 모습
+
+
 ## 🚨 SnakeYAML 1.30 취약점 개요
 SnakeYAML 1.30 버전에서는 신뢰할 수 없는 사용자의 입력값을 파싱할 때 치명적인 보안 문제가 발생한다. 본 프로젝트에서는 CVE에 정식 보고된 다음 두 가지 주요 취약점을 다룬다.
 1. **RCE (원격 코드 실행):** 악성 YAML 문서를 통해 서버에서 임의의 명령어가 실행될 수 있는 역직렬화(Deserialization) 취약점이다.
